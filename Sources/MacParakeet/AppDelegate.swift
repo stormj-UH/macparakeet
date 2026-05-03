@@ -59,6 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let promptResultsViewModel = PromptResultsViewModel()
     private let promptsViewModel = PromptsViewModel()
     private let mainWindowState = MainWindowState()
+    /// Long-lived companion for the meeting recording pill + Transcribe-tab tile.
+    /// `MeetingRecordingFlowCoordinator` writes state into it; both the floating
+    /// pill and the tile bind to the same instance.
+    private let meetingPillViewModel = MeetingRecordingPillViewModel()
     private let onboardingWindowController = OnboardingWindowController()
 
     private lazy var youtubeInputController = YouTubeInputPanelController(
@@ -82,7 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chatViewModel: chatViewModel,
         promptResultsViewModel: promptResultsViewModel,
         promptsViewModel: promptsViewModel,
-        mainWindowState: mainWindowState
+        mainWindowState: mainWindowState,
+        meetingPillViewModel: meetingPillViewModel
     )
 
     private lazy var onboardingCoordinator = OnboardingCoordinator(
@@ -132,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         discoverViewModel: discoverViewModel,
         libraryViewModel: libraryViewModel,
         meetingsViewModel: meetingsViewModel,
+        meetingPillViewModel: meetingPillViewModel,
         updaterController: updaterController,
         onRecordMeeting: { [weak self] in
             self?.toggleMeetingRecording(originatesFromWindow: true)

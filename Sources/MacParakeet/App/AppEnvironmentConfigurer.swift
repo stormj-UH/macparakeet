@@ -41,6 +41,7 @@ final class AppEnvironmentConfigurer {
     private let promptResultsViewModel: PromptResultsViewModel
     private let promptsViewModel: PromptsViewModel
     private let mainWindowState: MainWindowState
+    private let meetingPillViewModel: MeetingRecordingPillViewModel
     private weak var liveMeetingCoordinator: MeetingRecordingFlowCoordinator?
 
     init(
@@ -56,7 +57,8 @@ final class AppEnvironmentConfigurer {
         chatViewModel: TranscriptChatViewModel,
         promptResultsViewModel: PromptResultsViewModel,
         promptsViewModel: PromptsViewModel,
-        mainWindowState: MainWindowState
+        mainWindowState: MainWindowState,
+        meetingPillViewModel: MeetingRecordingPillViewModel
     ) {
         self.transcriptionViewModel = transcriptionViewModel
         self.historyViewModel = historyViewModel
@@ -71,6 +73,7 @@ final class AppEnvironmentConfigurer {
         self.promptResultsViewModel = promptResultsViewModel
         self.promptsViewModel = promptsViewModel
         self.mainWindowState = mainWindowState
+        self.meetingPillViewModel = meetingPillViewModel
     }
 
     func configure(environment env: AppEnvironment, callbacks: Callbacks) -> Runtime {
@@ -225,6 +228,7 @@ final class AppEnvironmentConfigurer {
             configStore: env.llmConfigStore,
             meetingAudioSourceModeProvider: { env.runtimePreferences.meetingAudioSourceMode },
             llmService: hasLLMConfig ? env.llmService : nil,
+            pillViewModel: meetingPillViewModel,
             onMenuBarIconUpdate: { _ in callbacks.onMenuBarIconUpdate() },
             onTranscriptionReady: { [weak self] transcription in
                 guard let self else { return }

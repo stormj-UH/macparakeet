@@ -62,6 +62,7 @@ struct MainWindowView: View {
     let discoverViewModel: DiscoverViewModel
     let libraryViewModel: TranscriptionLibraryViewModel
     let meetingsViewModel: TranscriptionLibraryViewModel
+    let meetingPillViewModel: MeetingRecordingPillViewModel
     let updater: SPUUpdater
     let onRecordMeeting: () -> Void
 
@@ -102,8 +103,10 @@ struct MainWindowView: View {
                             chatViewModel: chatViewModel,
                             promptResultsViewModel: promptResultsViewModel,
                             promptsViewModel: promptsViewModel,
+                            meetingPillViewModel: meetingPillViewModel,
                             showingProgressDetail: $state.showingProgressDetail,
-                            onNavigateBack: { state.navigateBack() }
+                            onNavigateBack: { state.navigateBack() },
+                            onRecordMeeting: onRecordMeeting
                         )
                     case .library:
                         TranscriptionLibraryView(
