@@ -33,15 +33,18 @@ bird reads as one continuous gesture, like signing your name.
 
 ## Canonical Asset
 
-The brand mark is shipped as a high-resolution white-on-near-black PNG.
-There is no canonical SVG/vector source in this repo — the PNG is the
-source of truth, and runtime variants are derived from it.
+The brand mark ships as a high-resolution white-on-near-black PNG. The PNG
+remains the runtime source of truth; vector siblings live in
+`brand-assets/marks/` for design work that raster can't do (infinite scaling,
+recoloring, poster-scale composition).
 
 | File | Size | Use |
 |------|------|-----|
-| `Assets/AppIcon-1024x1024.png` | 1024×1024 | Source of truth for the parakeet illustration; reference asset for design work |
+| `Assets/AppIcon-1024x1024.png` | 1024×1024 | Runtime source of truth for the parakeet illustration; reference asset for design work |
 | `Sources/MacParakeet/Resources/parakeet-mark.png` | 1024×1024 | Same PNG copied into the SwiftPM runtime bundle so app code can load it via `Bundle.module` |
 | `Sources/MacParakeet/Resources/menubar-icon.png` / `@2x.png` | 18pt / 36px | Hand-tuned smaller variant for the macOS menu bar; not derived from the 1024px source — separate authored asset |
+| `brand-assets/marks/parakeet-line.svg` | vector | Vector trace of the canonical mark, for design work (posters, social, large format). Recolorable via `currentColor`. |
+| `brand-assets/marks/parakeet-fill.svg` | vector | Plump silhouette sibling, for poster-scale and Pop tile work. See `brand-assets/README.md`. |
 
 ### Sizing & Legibility
 
@@ -141,6 +144,13 @@ MacParakeet uses minimal, purposeful color:
 The app intentionally uses system colors for chrome to feel native. The
 accent coral-orange is reserved for moments of attention — it is the same
 color the brand mark wears when it appears inline.
+
+For **promotional and editorial work** (posters, social campaigns, launch
+art, anniversary tributes), an extended Pop palette anchored on the same
+coral lives in `brand-assets/palette/`. Twelve curated colors, each chosen
+to read against ink and paper and to pair with coral. The Pop palette is
+**only** for moments — it must not leak into chrome. See
+`brand-assets/README.md` for guidance.
 
 ## Brand Voice
 
