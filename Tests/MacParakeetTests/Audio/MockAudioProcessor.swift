@@ -14,11 +14,19 @@ public actor MockAudioProcessor: AudioProcessorProtocol {
     public var convertCallCount = 0
     public var lastConvertURL: URL?
     public var convertURLs: [URL] = []
+    private var queuedConvertResults: [URL] = []
 
     public init() {}
 
     public func configure(convertResult: URL) {
         self.convertResult = convertResult
+        self.convertError = nil
+        self.queuedConvertResults = []
+    }
+
+    public func configureSequence(convertResults: [URL]) {
+        self.queuedConvertResults = convertResults
+        self.convertResult = nil
         self.convertError = nil
     }
 
@@ -60,6 +68,9 @@ public actor MockAudioProcessor: AudioProcessorProtocol {
         lastConvertURL = fileURL
         convertURLs.append(fileURL)
         if let error = convertError { throw error }
+        if !queuedConvertResults.isEmpty {
+            return queuedConvertResults.removeFirst()
+        }
         return convertResult ?? URL(fileURLWithPath: "/tmp/converted.wav")
     }
 

@@ -101,4 +101,49 @@ final class MeetingTranscriptNoiseFilterTests: XCTestCase {
             ["system", "microphone", "system", "system", "microphone", "microphone", "system", "microphone"]
         )
     }
+
+    func testFinalizeDropsWhisperSubtitleArtifactFromRawText() {
+        let finalized = MeetingTranscriptFinalizer.finalize(sourceTranscripts: [
+            .init(
+                source: .microphone,
+                result: STTResult(
+                    text: "What is happening? Продолжение следует...",
+                    words: [
+                        TimestampedWord(word: "What", startMs: 0, endMs: 150, confidence: 0.98),
+                        TimestampedWord(word: "is", startMs: 150, endMs: 270, confidence: 0.99),
+                        TimestampedWord(word: "happening?", startMs: 270, endMs: 610, confidence: 1.0),
+                        TimestampedWord(word: "Продолжение", startMs: 9_300, endMs: 10_700, confidence: 0.54),
+                        TimestampedWord(word: "следует...", startMs: 10_700, endMs: 12_100, confidence: 0.97),
+                    ],
+                    engine: .whisper,
+                    engineVariant: "large-v3-v20240930_turbo_632MB"
+                ),
+                startOffsetMs: 0
+            ),
+        ])
+
+        XCTAssertEqual(finalized.words.map(\.word), ["What", "is", "happening?"])
+        XCTAssertEqual(finalized.rawTranscript, "What is happening?")
+    }
+
+    func testFinalizeKeepsHighConfidenceWhisperSubtitlePhrase() {
+        let finalized = MeetingTranscriptFinalizer.finalize(sourceTranscripts: [
+            .init(
+                source: .microphone,
+                result: STTResult(
+                    text: "Продолжение следует...",
+                    words: [
+                        TimestampedWord(word: "Продолжение", startMs: 100, endMs: 1_400, confidence: 0.97),
+                        TimestampedWord(word: "следует...", startMs: 1_400, endMs: 2_800, confidence: 0.98),
+                    ],
+                    engine: .whisper,
+                    engineVariant: "large-v3-v20240930_turbo_632MB"
+                ),
+                startOffsetMs: 0
+            ),
+        ])
+
+        XCTAssertEqual(finalized.words.map(\.word), ["Продолжение", "следует..."])
+        XCTAssertEqual(finalized.rawTranscript, "Продолжение следует...")
+    }
 }

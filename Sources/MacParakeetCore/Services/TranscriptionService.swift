@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import OSLog
 
@@ -158,6 +159,10 @@ private struct TranscriptionOperationContext: Sendable {
 
 public actor TranscriptionService: SpeechEngineOverrideTranscriptionService {
     private let logger = Logger(subsystem: "com.macparakeet.core", category: "TranscriptionService")
+    private static let meetingSystemSignalFloor: Float = 0.00025
+    private static let meetingSystemSignalFrameSeconds: Double = 0.1
+    private static let meetingSystemMinimumActiveSeconds: Double = 2.0
+    private static let meetingSystemMinimumActiveRatio: Double = 0.02
     private let audioProcessor: AudioProcessorProtocol
     private let sttTranscriber: STTTranscribing
     private let transcriptionRepo: TranscriptionRepositoryProtocol
@@ -742,6 +747,10 @@ public actor TranscriptionService: SpeechEngineOverrideTranscriptionService {
             temporaryWavURLs.append(wavURL)
             sourceWavURLs[source] = wavURL
 
+            if shouldSkipMeetingSystemSource(source: source, speechEngine: speechEngine, wavURL: wavURL) {
+                continue
+            }
+
             lifecycleStage = .stt
             onProgress?(.transcribing(percent: Int((Double(index) / Double(max(activeSources.count, 1))) * 100)))
             let result = try await transcribeSpeech(
@@ -765,6 +774,180 @@ public actor TranscriptionService: SpeechEngineOverrideTranscriptionService {
         }
 
         return outputs
+    }
+
+    private func shouldSkipMeetingSystemSource(
+        source: AudioSource,
+        speechEngine: SpeechEngineSelection?,
+        wavURL: URL
+    ) -> Bool {
+        guard source == .system,
+              speechEngine?.engine == .whisper else {
+            return false
+        }
+
+        do {
+            if !(try Self.containsTranscribableSignal(in: wavURL)) {
+                logger.notice("meeting_source_skipped reason=low_signal source=system engine=whisper")
+                return true
+            }
+        } catch {
+            logger.warning("meeting_source_signal_probe_failed source=system engine=whisper error=\(error.localizedDescription, privacy: .public)")
+        }
+
+        return false
+    }
+
+    static func containsTranscribableSignal(in audioURL: URL) throws -> Bool {
+        let file = try AVAudioFile(forReading: audioURL)
+        let format = file.processingFormat
+        guard let bufferFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: format.sampleRate,
+            channels: format.channelCount,
+            interleaved: false
+        ) else {
+            return true
+        }
+
+        return try containsTranscribableSignal(
+            file: file,
+            bufferFormat: bufferFormat,
+            floor: meetingSystemSignalFloor,
+            frameSeconds: meetingSystemSignalFrameSeconds,
+            minimumActiveSeconds: meetingSystemMinimumActiveSeconds,
+            minimumActiveRatio: meetingSystemMinimumActiveRatio
+        )
+    }
+
+    static func containsTranscribableSignal(
+        samples: [Float],
+        sampleRate: Double,
+        floor: Float = meetingSystemSignalFloor,
+        frameSeconds: Double = meetingSystemSignalFrameSeconds,
+        minimumActiveSeconds: Double = meetingSystemMinimumActiveSeconds,
+        minimumActiveRatio: Double = meetingSystemMinimumActiveRatio
+    ) -> Bool {
+        guard !samples.isEmpty, sampleRate > 0 else {
+            return false
+        }
+
+        var activity = SignalActivity(
+            sampleRate: sampleRate,
+            channelCount: 1,
+            floor: floor,
+            frameSeconds: frameSeconds
+        )
+        for sample in samples {
+            activity.add(sample)
+        }
+        return activity.containsTranscribableSignal(
+            minimumActiveSeconds: minimumActiveSeconds,
+            minimumActiveRatio: minimumActiveRatio
+        )
+    }
+
+    private static func containsTranscribableSignal(
+        file: AVAudioFile,
+        bufferFormat: AVAudioFormat,
+        floor: Float,
+        frameSeconds: Double,
+        minimumActiveSeconds: Double,
+        minimumActiveRatio: Double
+    ) throws -> Bool {
+        let readCapacity: AVAudioFrameCount = 4_096
+        var activity = SignalActivity(
+            sampleRate: bufferFormat.sampleRate,
+            channelCount: Int(bufferFormat.channelCount),
+            floor: floor,
+            frameSeconds: frameSeconds
+        )
+
+        while file.framePosition < file.length {
+            let remaining = file.length - file.framePosition
+            let framesToRead = min(readCapacity, AVAudioFrameCount(remaining))
+            guard framesToRead > 0,
+                  let buffer = AVAudioPCMBuffer(pcmFormat: bufferFormat, frameCapacity: framesToRead) else {
+                break
+            }
+
+            try file.read(into: buffer, frameCount: framesToRead)
+            let frameLength = Int(buffer.frameLength)
+            guard frameLength > 0 else {
+                break
+            }
+            guard let channelData = buffer.floatChannelData else {
+                return true
+            }
+
+            for frame in 0..<frameLength {
+                for channel in 0..<Int(buffer.format.channelCount) {
+                    activity.add(channelData[channel][frame])
+                }
+            }
+        }
+
+        return activity.containsTranscribableSignal(
+            minimumActiveSeconds: minimumActiveSeconds,
+            minimumActiveRatio: minimumActiveRatio
+        )
+    }
+
+    private struct SignalActivity {
+        let floor: Float
+        let frameSeconds: Double
+        private let frameSampleCount: Int
+        private var currentSumSquares = 0.0
+        private var currentSampleCount = 0
+        private var totalFrames = 0
+        private var activeFrames = 0
+
+        init(
+            sampleRate: Double,
+            channelCount: Int,
+            floor: Float,
+            frameSeconds: Double
+        ) {
+            self.floor = floor
+            self.frameSeconds = frameSeconds
+            self.frameSampleCount = max(1, Int(sampleRate * frameSeconds) * max(channelCount, 1))
+        }
+
+        mutating func add(_ sample: Float) {
+            currentSumSquares += Double(sample * sample)
+            currentSampleCount += 1
+
+            if currentSampleCount >= frameSampleCount {
+                finishFrame()
+            }
+        }
+
+        mutating func containsTranscribableSignal(
+            minimumActiveSeconds: Double,
+            minimumActiveRatio: Double
+        ) -> Bool {
+            if currentSampleCount > 0 {
+                finishFrame()
+            }
+
+            guard totalFrames > 0 else {
+                return false
+            }
+
+            let activeSeconds = Double(activeFrames) * frameSeconds
+            let activeRatio = Double(activeFrames) / Double(totalFrames)
+            return activeSeconds >= minimumActiveSeconds || activeRatio >= minimumActiveRatio
+        }
+
+        private mutating func finishFrame() {
+            let rms = sqrt(currentSumSquares / Double(max(currentSampleCount, 1)))
+            if rms > Double(floor) {
+                activeFrames += 1
+            }
+            totalFrames += 1
+            currentSumSquares = 0
+            currentSampleCount = 0
+        }
     }
 
     private func diarizeMeetingSystemIfNeeded(

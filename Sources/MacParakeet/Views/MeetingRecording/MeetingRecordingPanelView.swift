@@ -243,6 +243,14 @@ struct MeetingRecordingPanelView: View {
                     .foregroundStyle(DesignSystem.Colors.warningAmber)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            if viewModel.showsWhisperMeetingWarning {
+                Label(viewModel.whisperMeetingWarningMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(DesignSystem.Typography.caption.weight(.semibold))
+                    .foregroundStyle(DesignSystem.Colors.warningAmber)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.horizontal, DesignSystem.Spacing.md)
         .padding(.vertical, DesignSystem.Spacing.sm)

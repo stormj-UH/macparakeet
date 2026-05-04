@@ -130,6 +130,34 @@ final class MeetingRecordingPanelViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showsLaggingIndicator)
     }
 
+    func testWhisperRecordingShowsMeetingWarning() {
+        let viewModel = MeetingRecordingPanelViewModel()
+
+        viewModel.state = .recording
+        viewModel.speechEngine = SpeechEngineSelection(engine: .whisper)
+
+        XCTAssertTrue(viewModel.showsWhisperMeetingWarning)
+        XCTAssertTrue(viewModel.whisperMeetingWarningMessage.contains("saved transcript"))
+
+        viewModel.state = .transcribing
+        XCTAssertTrue(viewModel.showsWhisperMeetingWarning)
+
+        viewModel.state = .recording
+        viewModel.speechEngine = SpeechEngineSelection(engine: .parakeet)
+        XCTAssertFalse(viewModel.showsWhisperMeetingWarning)
+    }
+
+    func testResetClearsWhisperMeetingWarning() {
+        let viewModel = MeetingRecordingPanelViewModel()
+        viewModel.state = .recording
+        viewModel.speechEngine = SpeechEngineSelection(engine: .whisper)
+
+        viewModel.reset()
+
+        XCTAssertEqual(viewModel.speechEngine, SpeechEngineSelection(engine: .parakeet))
+        XCTAssertFalse(viewModel.showsWhisperMeetingWarning)
+    }
+
     func testResetClearsTranscriptPreview() {
         let viewModel = MeetingRecordingPanelViewModel()
         viewModel.state = .recording

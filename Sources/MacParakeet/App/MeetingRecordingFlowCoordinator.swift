@@ -299,6 +299,7 @@ final class MeetingRecordingFlowCoordinator {
             panelVM.elapsedSeconds = 0
             panelVM.micLevel = 0
             panelVM.systemLevel = 0
+            panelVM.speechEngine = SpeechEngineSelection.current()
             panelVM.updatePreviewLines([], isTranscriptionLagging: false)
             panelVM.onStop = { [weak self] in self?.toggleRecording() }
             panelVM.onClose = { [weak self] in self?.hideMeetingPanel() }

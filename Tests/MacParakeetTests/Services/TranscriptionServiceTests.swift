@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import MacParakeetCore
 import os
@@ -594,6 +595,80 @@ final class TranscriptionServiceTests: XCTestCase {
         XCTAssertEqual(speakerCount, 2)
         XCTAssertFalse(diarizationRequested)
         XCTAssertFalse(diarizationApplied)
+    }
+
+    func testTranscribeMeetingSkipsLowSignalWhisperSystemSource() async throws {
+        let recordingFolder = URL(fileURLWithPath: AppPaths.tempDir)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: recordingFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: recordingFolder) }
+
+        let mixedURL = recordingFolder.appendingPathComponent("meeting.m4a")
+        let microphoneURL = recordingFolder.appendingPathComponent("microphone.m4a")
+        let systemURL = recordingFolder.appendingPathComponent("system.m4a")
+        let microphoneWavURL = recordingFolder.appendingPathComponent("microphone.wav")
+        let silentSystemWavURL = recordingFolder.appendingPathComponent("system-silent.wav")
+        XCTAssertTrue(FileManager.default.createFile(atPath: mixedURL.path, contents: Data("mixed".utf8)))
+        XCTAssertTrue(FileManager.default.createFile(atPath: microphoneURL.path, contents: Data("microphone".utf8)))
+        XCTAssertTrue(FileManager.default.createFile(atPath: systemURL.path, contents: Data("system".utf8)))
+        XCTAssertTrue(FileManager.default.createFile(atPath: microphoneWavURL.path, contents: Data("converted microphone".utf8)))
+        try writeTestWAV(
+            samples: Array(repeating: 0.00001, count: 80_000),
+            to: silentSystemWavURL
+        )
+        await mockAudio.configureSequence(convertResults: [microphoneWavURL, silentSystemWavURL])
+
+        await mockSTT.configure(result: STTResult(
+            text: "Hello there",
+            words: [
+                TimestampedWord(word: "Hello", startMs: 50, endMs: 260, confidence: 0.9),
+                TimestampedWord(word: "there", startMs: 300, endMs: 540, confidence: 0.9),
+            ],
+            engine: .whisper,
+            engineVariant: SpeechEnginePreference.defaultWhisperModelVariant
+        ))
+
+        let recording = MeetingRecordingOutput(
+            sessionID: UUID(),
+            displayName: "Whisper Meeting",
+            folderURL: recordingFolder,
+            mixedAudioURL: mixedURL,
+            microphoneAudioURL: microphoneURL,
+            systemAudioURL: systemURL,
+            durationSeconds: 5.0,
+            sourceAlignment: MeetingSourceAlignment(
+                meetingOriginHostTime: nil,
+                microphone: .init(firstHostTime: nil, lastHostTime: nil, startOffsetMs: 0, writtenFrameCount: 240_000, sampleRate: 48_000),
+                system: .init(firstHostTime: nil, lastHostTime: nil, startOffsetMs: 0, writtenFrameCount: 240_000, sampleRate: 48_000)
+            ),
+            speechEngine: SpeechEngineSelection(engine: .whisper)
+        )
+
+        let result = try await service.transcribeMeeting(recording: recording)
+        let sttCallCount = await mockSTT.transcribeCallCount
+        let audioPaths = await mockSTT.audioPaths
+        let convertCallCount = await mockAudio.convertCallCount
+
+        XCTAssertEqual(result.rawTranscript, "Hello there")
+        XCTAssertEqual(result.speakerCount, 1)
+        XCTAssertEqual(result.wordTimestamps?.map(\.speakerId), ["microphone", "microphone"])
+        XCTAssertEqual(sttCallCount, 1)
+        XCTAssertEqual(audioPaths, [microphoneWavURL.path])
+        XCTAssertEqual(convertCallCount, 2)
+    }
+
+    func testMeetingSystemSignalDetectionRequiresSustainedActivity() {
+        XCTAssertFalse(TranscriptionService.containsTranscribableSignal(
+            samples: Array(repeating: 0.00001, count: 160_000),
+            sampleRate: 16_000
+        ))
+
+        let shortSpeech = Array(repeating: Float(0.01), count: 16_000)
+        let surroundingSilence = Array(repeating: Float(0.0), count: 64_000)
+        XCTAssertTrue(TranscriptionService.containsTranscribableSignal(
+            samples: shortSpeech + surroundingSilence,
+            sampleRate: 16_000
+        ))
     }
 
     func testTranscribeMeetingUsesCapturedSpeechEngineSelection() async throws {
@@ -1369,5 +1444,33 @@ final class TranscriptionServiceTests: XCTestCase {
         let created = FileManager.default.createFile(atPath: url.path, contents: Data("audio".utf8))
         XCTAssertTrue(created)
         return url
+    }
+
+    private func writeTestWAV(
+        samples: [Float],
+        sampleRate: Double = 16_000,
+        to url: URL
+    ) throws {
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        ),
+        let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(samples.count)
+        ) else {
+            return XCTFail("Failed to allocate test audio buffer")
+        }
+
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        let channel = buffer.floatChannelData![0]
+        for (index, sample) in samples.enumerated() {
+            channel[index] = sample
+        }
+
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
     }
 }

@@ -64,9 +64,17 @@ struct MeetingTranscriptAssembler {
                 speakerId: source.rawValue
             )
         }
+        let filteredOffsetWords: [WordTimestamp]
+        if result.engine == .whisper {
+            filteredOffsetWords = MeetingTranscriptNoiseFilter
+                .cleanWhisperSubtitleArtifacts(words: offsetWords)
+                .words
+        } else {
+            filteredOffsetWords = offsetWords
+        }
 
         let cutoff = lastCommittedEndMs[source] ?? Int.min
-        let deduplicated = offsetWords.filter { $0.endMs > cutoff }
+        let deduplicated = filteredOffsetWords.filter { $0.endMs > cutoff }
 
         if !deduplicated.isEmpty {
             wordsBySource[source, default: []].append(contentsOf: deduplicated)

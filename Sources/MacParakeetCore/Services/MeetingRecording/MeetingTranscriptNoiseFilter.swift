@@ -6,6 +6,11 @@ struct MeetingTranscriptNoiseFilter {
         let removedMicrophoneWordCount: Int
     }
 
+    struct WordCleanupResult: Sendable, Equatable {
+        let words: [WordTimestamp]
+        let removedWordCount: Int
+    }
+
     private struct IndexedRun {
         let indexes: [Int]
         let words: [WordTimestamp]
@@ -31,6 +36,12 @@ struct MeetingTranscriptNoiseFilter {
     private static let duplicateLowConfidenceThreshold = 0.65
     private static let duplicateShortConfidenceThreshold = 0.80
     private static let allowedTokenCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "'"))
+    private static let whisperArtifactLowConfidenceThreshold = 0.65
+    private static let whisperArtifactAverageConfidenceThreshold = 0.80
+    private static let whisperArtifactIsolationGapMs = 2_000
+    private static let whisperSubtitleArtifactRuns: [[String]] = [
+        ["продолжение", "следует"],
+    ]
 
     static func cleanFinalMicrophoneWords(
         microphoneWords: [WordTimestamp],
@@ -64,6 +75,90 @@ struct MeetingTranscriptNoiseFilter {
             microphoneWords: cleaned,
             removedMicrophoneWordCount: indexesToDrop.count
         )
+    }
+
+    static func cleanWhisperSubtitleArtifacts(words: [WordTimestamp]) -> WordCleanupResult {
+        guard !words.isEmpty else {
+            return WordCleanupResult(words: [], removedWordCount: 0)
+        }
+
+        let normalizedTokens = words.map { normalizedToken($0.word) }
+        var indexesToDrop = Set<Int>()
+        var index = 0
+
+        while index < words.count {
+            if let range = whisperSubtitleArtifactRange(
+                startingAt: index,
+                words: words,
+                normalizedTokens: normalizedTokens
+            ) {
+                indexesToDrop.formUnion(range)
+                index = range.upperBound
+            } else {
+                index += 1
+            }
+        }
+
+        guard !indexesToDrop.isEmpty else {
+            return WordCleanupResult(words: words, removedWordCount: 0)
+        }
+
+        let cleaned = words.enumerated().compactMap { index, word in
+            indexesToDrop.contains(index) ? nil : word
+        }
+        return WordCleanupResult(words: cleaned, removedWordCount: indexesToDrop.count)
+    }
+
+    private static func whisperSubtitleArtifactRange(
+        startingAt startIndex: Int,
+        words: [WordTimestamp],
+        normalizedTokens: [String?]
+    ) -> Range<Int>? {
+        for run in whisperSubtitleArtifactRuns {
+            let endIndex = startIndex + run.count
+            guard endIndex <= normalizedTokens.count else { continue }
+
+            let candidate = normalizedTokens[startIndex..<endIndex]
+            let range = startIndex..<endIndex
+            if candidate.elementsEqual(run.map(Optional.some)),
+               shouldDropWhisperSubtitleArtifactRun(words: words, range: range) {
+                return startIndex..<endIndex
+            }
+        }
+
+        return nil
+    }
+
+    private static func shouldDropWhisperSubtitleArtifactRun(
+        words: [WordTimestamp],
+        range: Range<Int>
+    ) -> Bool {
+        let run = Array(words[range])
+        let hasLowConfidenceToken = run.contains { $0.confidence <= whisperArtifactLowConfidenceThreshold }
+        let averageConfidence = run.reduce(0.0) { $0 + $1.confidence } / Double(run.count)
+        let confidenceLooksSuspicious = hasLowConfidenceToken
+            || averageConfidence <= whisperArtifactAverageConfidenceThreshold
+
+        return confidenceLooksSuspicious
+            && isIsolatedWhisperSubtitleArtifactRun(words: words, range: range)
+    }
+
+    private static func isIsolatedWhisperSubtitleArtifactRun(
+        words: [WordTimestamp],
+        range: Range<Int>
+    ) -> Bool {
+        guard let first = words[range].first, let last = words[range].last else {
+            return false
+        }
+
+        let separatedFromPrevious =
+            range.lowerBound == words.startIndex
+            || first.startMs - words[range.lowerBound - 1].endMs >= whisperArtifactIsolationGapMs
+        let separatedFromNext =
+            range.upperBound == words.endIndex
+            || words[range.upperBound].startMs - last.endMs >= whisperArtifactIsolationGapMs
+
+        return separatedFromPrevious && separatedFromNext
     }
 
     private static func contiguousRuns(in words: [WordTimestamp]) -> [IndexedRun] {

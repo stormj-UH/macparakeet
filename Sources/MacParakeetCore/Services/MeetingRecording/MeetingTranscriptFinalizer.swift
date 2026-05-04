@@ -31,14 +31,25 @@ struct MeetingTranscriptFinalizer {
             return lhs.startOffsetMs < rhs.startOffsetMs
         }
 
-        let shiftedWordsBySource = Dictionary(uniqueKeysWithValues: normalized.map { sourceTranscript in
-            (
+        var removedWhisperArtifactWordCount = 0
+        let shiftedWordsBySource: [AudioSource: [WordTimestamp]] = Dictionary(uniqueKeysWithValues: normalized.map { sourceTranscript in
+            let words = shiftedWords(
+                for: sourceTranscript.result,
+                source: sourceTranscript.source,
+                offsetMs: sourceTranscript.startOffsetMs
+            )
+            let cleanedWords: [WordTimestamp]
+            if sourceTranscript.result.engine == .whisper {
+                let cleanup = MeetingTranscriptNoiseFilter.cleanWhisperSubtitleArtifacts(words: words)
+                removedWhisperArtifactWordCount += cleanup.removedWordCount
+                cleanedWords = cleanup.words
+            } else {
+                cleanedWords = words
+            }
+
+            return (
                 sourceTranscript.source,
-                shiftedWords(
-                    for: sourceTranscript.result,
-                    source: sourceTranscript.source,
-                    offsetMs: sourceTranscript.startOffsetMs
-                )
+                cleanedWords
             )
         })
 
@@ -73,6 +84,7 @@ struct MeetingTranscriptFinalizer {
             from: normalized,
             mergedWords: mergedWords,
             forceMergedWordText: microphoneCleanup.removedMicrophoneWordCount > 0
+                || removedWhisperArtifactWordCount > 0
         )
 
         return FinalizedTranscript(

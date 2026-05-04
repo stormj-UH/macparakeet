@@ -32,6 +32,7 @@ public final class MeetingRecordingPanelViewModel {
     public var elapsedSeconds: Int = 0
     public var micLevel: Float = 0
     public var systemLevel: Float = 0
+    public var speechEngine: SpeechEngineSelection = SpeechEngineSelection(engine: .parakeet)
     public var previewLines: [MeetingRecordingPreviewLine] = []
     public var isTranscriptionLagging: Bool = false
     public var showCopiedConfirmation: Bool = false
@@ -116,6 +117,7 @@ public final class MeetingRecordingPanelViewModel {
         elapsedSeconds = 0
         micLevel = 0
         systemLevel = 0
+        speechEngine = SpeechEngineSelection(engine: .parakeet)
         previewLines = []
         previewLineWordCounts = []
         wordCount = 0
@@ -185,6 +187,19 @@ public final class MeetingRecordingPanelViewModel {
             return isTranscriptionLagging
         }
         return false
+    }
+
+    public var showsWhisperMeetingWarning: Bool {
+        switch state {
+        case .recording, .transcribing:
+            return speechEngine.engine == .whisper
+        default:
+            return false
+        }
+    }
+
+    public var whisperMeetingWarningMessage: String {
+        "Whisper meeting transcription is experimental and may be inaccurate during recording and in the saved transcript."
     }
 
     public var showsElapsedTime: Bool {

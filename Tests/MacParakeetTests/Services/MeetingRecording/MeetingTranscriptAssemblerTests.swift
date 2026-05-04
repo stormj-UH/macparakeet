@@ -23,6 +23,92 @@ final class MeetingTranscriptAssemblerTests: XCTestCase {
         XCTAssertEqual(update.words.map(\.speakerId), ["microphone", "microphone", "microphone"])
     }
 
+    func testApplyDropsWhisperSubtitleArtifactRun() {
+        var assembler = MeetingTranscriptAssembler()
+
+        _ = assembler.apply(
+            result: STTResult(text: "Okay", words: [
+                TimestampedWord(word: "Okay", startMs: 100, endMs: 400, confidence: 0.95),
+            ]),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 5_000),
+            source: .microphone
+        )
+
+        let update = assembler.apply(
+            result: STTResult(
+                text: "Продолжение следует...",
+                words: [
+                    TimestampedWord(word: "Продолжение", startMs: 100, endMs: 1_400, confidence: 0.54),
+                    TimestampedWord(word: "следует...", startMs: 1_400, endMs: 2_800, confidence: 0.97),
+                ],
+                engine: .whisper,
+                engineVariant: "large-v3-v20240930_turbo_632MB"
+            ),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 4_000, endMs: 9_000),
+            source: .microphone
+        )
+
+        XCTAssertEqual(update.words.map(\.word), ["Okay"])
+    }
+
+    func testApplyKeepsSubtitleWordsFromNonWhisperEngine() {
+        var assembler = MeetingTranscriptAssembler()
+
+        let update = assembler.apply(
+            result: STTResult(text: "Продолжение следует...", words: [
+                TimestampedWord(word: "Продолжение", startMs: 100, endMs: 1_400, confidence: 0.54),
+                TimestampedWord(word: "следует...", startMs: 1_400, endMs: 2_800, confidence: 0.97),
+            ]),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 5_000),
+            source: .microphone
+        )
+
+        XCTAssertEqual(update.words.map(\.word), ["Продолжение", "следует..."])
+    }
+
+    func testApplyKeepsContextualWhisperSubtitlePhrase() {
+        var assembler = MeetingTranscriptAssembler()
+
+        let update = assembler.apply(
+            result: STTResult(
+                text: "He said Продолжение следует today",
+                words: [
+                    TimestampedWord(word: "He", startMs: 0, endMs: 120, confidence: 0.96),
+                    TimestampedWord(word: "said", startMs: 180, endMs: 340, confidence: 0.96),
+                    TimestampedWord(word: "Продолжение", startMs: 390, endMs: 1_000, confidence: 0.54),
+                    TimestampedWord(word: "следует", startMs: 1_000, endMs: 1_520, confidence: 0.97),
+                    TimestampedWord(word: "today", startMs: 1_580, endMs: 1_900, confidence: 0.96),
+                ],
+                engine: .whisper,
+                engineVariant: "large-v3-v20240930_turbo_632MB"
+            ),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 5_000),
+            source: .microphone
+        )
+
+        XCTAssertEqual(update.words.map(\.word), ["He", "said", "Продолжение", "следует", "today"])
+    }
+
+    func testApplyKeepsHighConfidenceWhisperSubtitlePhrase() {
+        var assembler = MeetingTranscriptAssembler()
+
+        let update = assembler.apply(
+            result: STTResult(
+                text: "Продолжение следует...",
+                words: [
+                    TimestampedWord(word: "Продолжение", startMs: 100, endMs: 1_400, confidence: 0.97),
+                    TimestampedWord(word: "следует...", startMs: 1_400, endMs: 2_800, confidence: 0.98),
+                ],
+                engine: .whisper,
+                engineVariant: "large-v3-v20240930_turbo_632MB"
+            ),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 5_000),
+            source: .microphone
+        )
+
+        XCTAssertEqual(update.words.map(\.word), ["Продолжение", "следует..."])
+    }
+
     func testFinalizedTranscriptBuildsSpeakerMetadataAcrossSources() {
         var assembler = MeetingTranscriptAssembler()
 
