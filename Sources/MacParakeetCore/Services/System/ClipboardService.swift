@@ -14,6 +14,7 @@ public enum ClipboardServiceError: LocalizedError {
     case accessibilityPermissionRequired
     case eventSourceUnavailable
     case eventCreationFailed
+    case pasteboardWriteFailed
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +24,8 @@ public enum ClipboardServiceError: LocalizedError {
             return "Paste automation unavailable (event source creation failed)."
         case .eventCreationFailed:
             return "Paste automation unavailable (could not create keyboard events)."
+        case .pasteboardWriteFailed:
+            return "Paste automation unavailable (could not write transcript to the clipboard)."
         }
     }
 }
@@ -30,24 +33,33 @@ public enum ClipboardServiceError: LocalizedError {
 /// Handles clipboard save/restore and paste simulation via Cmd+V.
 @MainActor
 public final class ClipboardService: ClipboardServiceProtocol {
+    nonisolated static let defaultClipboardRestoreDelay: TimeInterval = 1.0
+
     private let logger = Logger(subsystem: "com.macparakeet.core", category: "ClipboardService")
     private let pasteShortcutKeyResolver: PasteShortcutKeyResolver
+    private let clipboardRestoreDelay: TimeInterval
 
     public init() {
         pasteShortcutKeyResolver = PasteShortcutKeyResolver()
+        clipboardRestoreDelay = Self.defaultClipboardRestoreDelay
     }
 
-    init(pasteShortcutKeyResolver: PasteShortcutKeyResolver) {
+    init(
+        pasteShortcutKeyResolver: PasteShortcutKeyResolver,
+        clipboardRestoreDelay: TimeInterval = ClipboardService.defaultClipboardRestoreDelay
+    ) {
         self.pasteShortcutKeyResolver = pasteShortcutKeyResolver
+        self.clipboardRestoreDelay = clipboardRestoreDelay
     }
 
     /// Paste text into the active app by:
     /// 1. Saving current clipboard
     /// 2. Setting transcript on clipboard
     /// 3. Simulating Cmd+V
-    /// 4. Restoring original clipboard after 150ms delay
+    /// 4. Restoring original clipboard after a delay long enough for slow paste targets
     public func pasteText(_ text: String) async throws {
         let pasteboard = NSPasteboard.general
+        let restoreDelay = clipboardRestoreDelay
 
         // 1. Save current clipboard contents
         let savedItems: [NSPasteboardItem]? = pasteboard.pasteboardItems?.map { item in
@@ -62,13 +74,20 @@ public final class ClipboardService: ClipboardServiceProtocol {
 
         // 2. Set transcript
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        guard pasteboard.setString(text, forType: .string) else {
+            pasteboard.clearContents()
+            if let savedItems, !savedItems.isEmpty {
+                pasteboard.writeObjects(savedItems)
+            }
+            throw ClipboardServiceError.pasteboardWriteFailed
+        }
         let ourChangeCount = pasteboard.changeCount
 
         // Always attempt to restore the previous clipboard contents after a short delay.
-        // If caller intentionally rewrites clipboard on error, changeCount guard prevents clobbering.
+        // The delay must cover apps that process the posted Cmd+V asynchronously.
+        // If the user intentionally rewrites the clipboard, changeCount guard prevents clobbering.
         defer {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + restoreDelay) {
                 // If the user changed the clipboard after we wrote, do not clobber it.
                 guard pasteboard.changeCount == ourChangeCount else {
                     return
