@@ -424,7 +424,7 @@ public actor STTScheduler: STTManaging, SpeechEngineRoutedTranscribing, SpeechEn
     /// exceeds `runtimeOperationWatchdogTimeout`, emits
     /// `stt_runtime_unhealthy` telemetry. The caller continues to await; this
     /// is observability-only.
-    private func observingRuntimeTimeout<T>(
+    private func observingRuntimeTimeout<T: Sendable>(
         reason: String,
         operation: () async -> T
     ) async -> T {
@@ -436,7 +436,7 @@ public actor STTScheduler: STTManaging, SpeechEngineRoutedTranscribing, SpeechEn
         return await operation()
     }
 
-    private func observingRuntimeTimeoutThrowing<T>(
+    private func observingRuntimeTimeoutThrowing<T: Sendable>(
         reason: String,
         operation: () async throws -> T
     ) async throws -> T {
