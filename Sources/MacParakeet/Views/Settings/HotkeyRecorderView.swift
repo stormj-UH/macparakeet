@@ -203,14 +203,7 @@ struct HotkeyRecorderView: View {
                 }
             } else if event.type == .flagsChanged {
                 // Identify which modifier key changed
-                let modifierName: String? = switch event.keyCode {
-                case 63, 179:  "fn"       // Fn/Globe
-                case 59, 62:   "control"  // Left/Right Control
-                case 58, 61:   "option"   // Left/Right Option
-                case 56, 60:   "shift"    // Left/Right Shift
-                case 55, 54:   "command"  // Left/Right Command
-                default:       nil
-                }
+                let modifierName = HotkeyTrigger.modifierName(forKeyCode: event.keyCode)
 
                 if let name = modifierName {
                     if name == "fn" {
@@ -323,8 +316,7 @@ struct HotkeyRecorderView: View {
         flags: NSEvent.ModifierFlags
     ) -> [HotkeyTrigger.ModifierComponent] {
         let cgFlags = CGEventFlags(rawValue: UInt64(flags.rawValue))
-        let sideSpecificKeyCodes: [UInt16] = [59, 62, 58, 61, 56, 60, 55, 54]
-        let sideSpecificHeld: [HotkeyTrigger.ModifierComponent] = sideSpecificKeyCodes.compactMap { keyCode in
+        let sideSpecificHeld: [HotkeyTrigger.ModifierComponent] = HotkeyTrigger.sideSpecificModifierKeyCodes.compactMap { keyCode in
             guard ModifierKeyMatcher.sideSpecificModifierIsPressed(flags: cgFlags, keyCode: keyCode) else {
                 return nil
             }

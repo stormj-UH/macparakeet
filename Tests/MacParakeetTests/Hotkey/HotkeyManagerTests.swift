@@ -869,6 +869,30 @@ final class HotkeyManagerTests: XCTestCase {
         )
     }
 
+    func testModifierChordDoesNotStartAfterSupersetModifierIsReleased() {
+        let trigger = HotkeyTrigger.modifierChord(modifiers: ["command", "option"])
+        let manager = HotkeyManager(trigger: trigger)
+
+        XCTAssertEqual(
+            manager.modifierChordFlagsChangedOutputsForTesting(
+                flags: [.maskCommand, .maskAlternate, .maskShift],
+                timestampMs: 1_000
+            ),
+            []
+        )
+        XCTAssertEqual(
+            manager.modifierChordFlagsChangedOutputsForTesting(
+                flags: [.maskCommand, .maskAlternate],
+                timestampMs: 1_025
+            ),
+            []
+        )
+        XCTAssertEqual(
+            manager.modifierChordFlagsChangedOutputsForTesting(flags: [], timestampMs: 1_050),
+            []
+        )
+    }
+
     func testSideSpecificModifierChordRequiresRecordedSides() {
         let trigger = HotkeyTrigger.modifierChord(
             components: [
@@ -922,6 +946,48 @@ final class HotkeyManagerTests: XCTestCase {
                 ),
                 timestampMs: 1_000
             ),
+            []
+        )
+    }
+
+    func testSideSpecificModifierChordDoesNotStartAfterOppositeSideIsReleased() {
+        let trigger = HotkeyTrigger.modifierChord(
+            components: [
+                .init(modifierName: "option", keyCode: 61),
+                .init(modifierName: "command", keyCode: 54),
+            ]
+        )
+        let manager = HotkeyManager(trigger: trigger)
+
+        XCTAssertEqual(
+            manager.modifierChordFlagsChangedOutputsForTesting(
+                flags: sideSpecificFlags(
+                    CGEventFlags.maskAlternate.rawValue,
+                    CGEventFlags.maskCommand.rawValue,
+                    leftOptionMask,
+                    rightOptionMask,
+                    rightCommandMask
+                ),
+                timestampMs: 1_000
+            ),
+            []
+        )
+
+        XCTAssertEqual(
+            manager.modifierChordFlagsChangedOutputsForTesting(
+                flags: sideSpecificFlags(
+                    CGEventFlags.maskAlternate.rawValue,
+                    CGEventFlags.maskCommand.rawValue,
+                    rightOptionMask,
+                    rightCommandMask
+                ),
+                timestampMs: 1_025
+            ),
+            []
+        )
+
+        XCTAssertEqual(
+            manager.modifierChordFlagsChangedOutputsForTesting(flags: [], timestampMs: 1_050),
             []
         )
     }

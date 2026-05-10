@@ -203,6 +203,81 @@ final class GlobalShortcutManagerTests: XCTestCase {
         manager.modifierChordFlagsChangedForTesting(flags: [.maskCommand, .maskAlternate, .maskShift])
         manager.modifierChordFlagsChangedForTesting(flags: [.maskCommand, .maskAlternate])
 
+        XCTAssertEqual(triggerCount, 0)
+
+        manager.modifierChordFlagsChangedForTesting(flags: [])
+        manager.modifierChordFlagsChangedForTesting(flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertEqual(triggerCount, 1)
+    }
+
+    func testSideSpecificModifierDoesNotRetriggerWhenOppositeSideIsReleased() {
+        let trigger = HotkeyTrigger(kind: .modifier, modifierName: "option", keyCode: nil, modifierKeyCode: 61)
+        let manager = GlobalShortcutManager(trigger: trigger)
+        var triggerCount = 0
+        manager.onTrigger = { triggerCount += 1 }
+
+        manager.modifierFlagsChangedForTesting(
+            flags: sideSpecificFlags(CGEventFlags.maskAlternate.rawValue, rightOptionMask)
+        )
+        manager.modifierFlagsChangedForTesting(
+            flags: sideSpecificFlags(CGEventFlags.maskAlternate.rawValue, leftOptionMask, rightOptionMask)
+        )
+        manager.modifierFlagsChangedForTesting(
+            flags: sideSpecificFlags(CGEventFlags.maskAlternate.rawValue, rightOptionMask)
+        )
+
+        XCTAssertEqual(triggerCount, 1)
+
+        manager.modifierFlagsChangedForTesting(flags: [])
+        manager.modifierFlagsChangedForTesting(
+            flags: sideSpecificFlags(CGEventFlags.maskAlternate.rawValue, rightOptionMask)
+        )
+
+        XCTAssertEqual(triggerCount, 2)
+    }
+
+    func testSideSpecificModifierChordDoesNotTriggerAfterOppositeSideIsReleased() {
+        let trigger = HotkeyTrigger.modifierChord(
+            components: [
+                .init(modifierName: "option", keyCode: 61),
+                .init(modifierName: "command", keyCode: 54),
+            ]
+        )
+        let manager = GlobalShortcutManager(trigger: trigger)
+        var triggerCount = 0
+        manager.onTrigger = { triggerCount += 1 }
+
+        manager.modifierChordFlagsChangedForTesting(
+            flags: sideSpecificFlags(
+                CGEventFlags.maskAlternate.rawValue,
+                CGEventFlags.maskCommand.rawValue,
+                leftOptionMask,
+                rightOptionMask,
+                rightCommandMask
+            )
+        )
+        manager.modifierChordFlagsChangedForTesting(
+            flags: sideSpecificFlags(
+                CGEventFlags.maskAlternate.rawValue,
+                CGEventFlags.maskCommand.rawValue,
+                rightOptionMask,
+                rightCommandMask
+            )
+        )
+
+        XCTAssertEqual(triggerCount, 0)
+
+        manager.modifierChordFlagsChangedForTesting(flags: [])
+        manager.modifierChordFlagsChangedForTesting(
+            flags: sideSpecificFlags(
+                CGEventFlags.maskAlternate.rawValue,
+                CGEventFlags.maskCommand.rawValue,
+                rightOptionMask,
+                rightCommandMask
+            )
+        )
+
         XCTAssertEqual(triggerCount, 1)
     }
 

@@ -129,6 +129,10 @@ public struct HotkeyTrigger: Sendable {
         54: ("Right", "R", "command"),
     ]
 
+    public static let canonicalFnKeyCode: UInt16 = 63
+    public static let fnKeyCodes: Set<UInt16> = [canonicalFnKeyCode, 179]
+    public static let sideSpecificModifierKeyCodes: [UInt16] = [59, 62, 58, 61, 56, 60, 55, 54]
+
     private static let modifierOppositeKeyCodes: [UInt16: UInt16] = [
         56: 60,
         60: 56,
@@ -159,7 +163,7 @@ public struct HotkeyTrigger: Sendable {
     }
 
     private static func sortedModifierComponentDisplayNames(_ components: [ModifierComponent]?) -> [String] {
-        normalizedModifierComponents(components ?? []).compactMap { component in
+        (components ?? []).compactMap { component in
             if let keyCode = component.keyCode,
                let info = modifierKeyCodeInfo[keyCode],
                let base = modifierDisplayNames[info.modifier] {
@@ -170,7 +174,7 @@ public struct HotkeyTrigger: Sendable {
     }
 
     private static func sortedModifierComponentSymbols(_ components: [ModifierComponent]?) -> String {
-        normalizedModifierComponents(components ?? []).compactMap { component in
+        (components ?? []).compactMap { component in
             if let keyCode = component.keyCode,
                let info = modifierKeyCodeInfo[keyCode],
                let base = modifierDisplayNames[info.modifier] {
@@ -202,7 +206,7 @@ public struct HotkeyTrigger: Sendable {
     }
 
     public var normalizedModifierChordComponents: [ModifierComponent] {
-        Self.normalizedModifierComponents(modifierChordComponents ?? [])
+        modifierChordComponents ?? []
     }
 
     public var modifierChordKeyCodes: [UInt16] {
@@ -265,11 +269,17 @@ public struct HotkeyTrigger: Sendable {
     }
 
     public static func modifierName(forKeyCode keyCode: UInt16) -> String? {
-        modifierKeyCodeInfo[keyCode]?.modifier
+        if isFnKeyCode(keyCode) { return "fn" }
+        return modifierKeyCodeInfo[keyCode]?.modifier
+    }
+
+    public static func isFnKeyCode(_ keyCode: UInt16) -> Bool {
+        fnKeyCodes.contains(keyCode)
     }
 
     public static func modifierComponent(forKeyCode keyCode: UInt16) -> ModifierComponent? {
-        guard let name = modifierName(forKeyCode: keyCode) else { return nil }
+        guard !isFnKeyCode(keyCode),
+              let name = modifierName(forKeyCode: keyCode) else { return nil }
         return ModifierComponent(modifierName: name, keyCode: keyCode)
     }
 
@@ -292,7 +302,7 @@ public struct HotkeyTrigger: Sendable {
         self.keyCode = keyCode
         self.chordModifiers = chordModifiers
         self.modifierKeyCode = modifierKeyCode
-        self.modifierChordComponents = modifierChordComponents
+        self.modifierChordComponents = modifierChordComponents.map { Self.normalizedModifierComponents($0) }
     }
 
     // MARK: - Disabled Preset
@@ -462,7 +472,7 @@ public struct HotkeyTrigger: Sendable {
     }
 
     private static func validateModifierChord(_ components: [ModifierComponent]?) -> ValidationResult {
-        guard normalizedModifierComponents(components ?? []).count >= 2 else {
+        guard (components ?? []).count >= 2 else {
             return .blocked("Press at least two modifier keys.")
         }
         return .allowed
@@ -503,11 +513,10 @@ public struct HotkeyTrigger: Sendable {
                 || Self.requirements(rhs, canBeSatisfiedBy: lhs)
         case (.modifierChord, .chord):
             let lhs = Self.modifierRequirements(forModifierChord: self)
-            guard lhs.count >= 2 else { return false }
-            return Self.requirements(
-                lhs,
-                canBeSatisfiedBy: Self.modifierRequirements(forChord: other)
-            )
+            let rhs = Self.modifierRequirements(forChord: other)
+            guard lhs.count >= 2, !rhs.isEmpty else { return false }
+            return Self.requirements(lhs, canBeSatisfiedBy: rhs)
+                || Self.requirements(rhs, canBeSatisfiedBy: lhs)
         case (.chord, .modifierChord):
             return other.overlaps(with: self)
         case (.keyCode, .keyCode):
@@ -654,10 +663,11 @@ extension HotkeyTrigger: Codable {
         keyCode = try container.decodeIfPresent(UInt16.self, forKey: .keyCode)
         chordModifiers = try container.decodeIfPresent([String].self, forKey: .chordModifiers)
         modifierKeyCode = try container.decodeIfPresent(UInt16.self, forKey: .modifierKeyCode)
-        modifierChordComponents = try container.decodeIfPresent(
+        let components = try container.decodeIfPresent(
             [ModifierComponent].self,
             forKey: .modifierChordComponents
         )
+        modifierChordComponents = components.map { Self.normalizedModifierComponents($0) }
     }
 
     public func encode(to encoder: Encoder) throws {

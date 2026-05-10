@@ -44,6 +44,7 @@ public final class HotkeyManager {
     private var chordModifierReleased = false
     private var modifierChordRequiredWasPressed = false
     private var modifierChordGestureIsActive = false
+    private var modifierChordBlockedUntilRelease = false
     private var activeRecordingMode: FnKeyStateMachine.RecordingMode?
 
     /// Bare-tap filtering: true until a non-Escape key is pressed while modifier is held.
@@ -155,6 +156,7 @@ public final class HotkeyManager {
         chordModifierReleased = false
         modifierChordRequiredWasPressed = false
         modifierChordGestureIsActive = false
+        modifierChordBlockedUntilRelease = false
         activeRecordingMode = nil
         bareTap = true
         gestureController.reset()
@@ -307,7 +309,7 @@ public final class HotkeyManager {
     ) -> [HotkeyGestureController.Output] {
         if keyCode == 53 { // Escape
             return gestureController.escapePressed()
-        } else if keyCode != 63 && keyCode != 179 {
+        } else if !HotkeyTrigger.isFnKeyCode(UInt16(keyCode)) {
             // Skip Fn/Globe key (63/179) — macOS generates a synthetic keyDown
             // with keyCode 179 when Fn is released (for "Change Input Source" or
             // "Show Emoji & Symbols"). Without this guard, that keyDown resets
@@ -567,6 +569,7 @@ public final class HotkeyManager {
         modifierChordRequiredWasPressed = requiredPressed
 
         guard requiredPressed else {
+            modifierChordBlockedUntilRelease = false
             guard modifierChordGestureIsActive else {
                 bareTap = true
                 return []
@@ -585,17 +588,24 @@ public final class HotkeyManager {
 
         if !wasRequiredPressed {
             bareTap = true
+            modifierChordBlockedUntilRelease = !exactPressed
+        }
+
+        if modifierChordGestureIsActive, !exactPressed {
+            modifierChordBlockedUntilRelease = true
+            guard bareTap else { return [] }
+            bareTap = false
+            return gestureController.interrupted()
         }
 
         if exactPressed, !modifierChordGestureIsActive {
+            guard !modifierChordBlockedUntilRelease else { return [] }
             modifierChordGestureIsActive = true
             bareTap = true
             return gestureController.triggerPressed(timestampMs: timestampMs)
         }
 
-        guard modifierChordGestureIsActive, !exactPressed, bareTap else { return [] }
-        bareTap = false
-        return gestureController.interrupted()
+        return []
     }
 
     private func modifierChordKeyDownOutputs(
@@ -604,7 +614,7 @@ public final class HotkeyManager {
     ) -> [HotkeyGestureController.Output] {
         if keyCode == 53 {
             return gestureController.escapePressed()
-        } else if keyCode != 63 && keyCode != 179 {
+        } else if !HotkeyTrigger.isFnKeyCode(UInt16(keyCode)) {
             if modifierChordGestureIsActive {
                 bareTap = false
             }
@@ -693,6 +703,7 @@ public final class HotkeyManager {
         targetModifierGestureIsActive = false
         modifierChordGestureIsActive = false
         modifierChordRequiredWasPressed = false
+        modifierChordBlockedUntilRelease = false
         activeRecordingMode = nil
         bareTap = true
         gestureController.reset()
@@ -749,6 +760,7 @@ public final class HotkeyManager {
             }
         case .modifierChord:
             modifierChordGestureIsActive = triggerPressed
+            modifierChordBlockedUntilRelease = !triggerPressed && modifierChordRequiredWasPressed
             if !triggerPressed {
                 bareTap = true
             }
@@ -780,7 +792,14 @@ public final class HotkeyManager {
         guard trigger.kind == .modifier else { return }
 
         let currentFlags = flags ?? CGEventSource.flagsState(.combinedSessionState)
-        targetModifierWasPressed = ModifierKeyMatcher.modifierIsPressed(trigger: trigger, flags: currentFlags)
+        if let targetKeyCode = trigger.modifierKeyCode {
+            targetModifierWasPressed = ModifierKeyMatcher.sideSpecificModifierIsPressed(
+                flags: currentFlags,
+                keyCode: targetKeyCode
+            )
+        } else {
+            targetModifierWasPressed = ModifierKeyMatcher.modifierIsPressed(trigger: trigger, flags: currentFlags)
+        }
         previousModifierFlags = currentFlags
 
         if !targetModifierWasPressed {
@@ -797,6 +816,8 @@ public final class HotkeyManager {
             trigger: trigger,
             flags: currentFlags
         )
+        let exactPressed = ModifierKeyMatcher.modifierChordMatches(trigger: trigger, flags: currentFlags)
+        modifierChordBlockedUntilRelease = modifierChordRequiredWasPressed && !exactPressed
 
         if !modifierChordRequiredWasPressed {
             modifierChordGestureIsActive = false

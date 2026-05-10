@@ -18,6 +18,7 @@ public final class GlobalShortcutManager {
     private var triggerKeyIsPressed = false
     private var modifierChordRequiredWasPressed = false
     private var modifierChordTriggeredDuringPress = false
+    private var modifierChordBlockedUntilRelease = false
 
     public init(trigger: HotkeyTrigger) {
         self.trigger = trigger
@@ -90,6 +91,7 @@ public final class GlobalShortcutManager {
         triggerKeyIsPressed = false
         modifierChordRequiredWasPressed = false
         modifierChordTriggeredDuringPress = false
+        modifierChordBlockedUntilRelease = false
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -125,12 +127,33 @@ public final class GlobalShortcutManager {
     }
 
     private func handleModifierFlagsChanged(flags: CGEventFlags) {
+        if let targetKeyCode = trigger.modifierKeyCode {
+            handleSideSpecificModifierFlagsChanged(flags: flags, targetKeyCode: targetKeyCode)
+            return
+        }
+
         let isPressed = ModifierKeyMatcher.modifierIsPressed(trigger: trigger, flags: flags)
         if isPressed != targetModifierWasPressed {
             targetModifierWasPressed = isPressed
             if isPressed {
                 onTrigger?()
             }
+        }
+    }
+
+    private func handleSideSpecificModifierFlagsChanged(flags: CGEventFlags, targetKeyCode: UInt16) {
+        let isPressed = ModifierKeyMatcher.sideSpecificModifierIsPressed(flags: flags, keyCode: targetKeyCode)
+        let oppositeIsPressed = ModifierKeyMatcher.oppositeSideModifierIsPressed(flags: flags, keyCode: targetKeyCode)
+
+        guard isPressed else {
+            targetModifierWasPressed = false
+            return
+        }
+
+        guard !targetModifierWasPressed else { return }
+        targetModifierWasPressed = true
+        if !oppositeIsPressed {
+            onTrigger?()
         }
     }
 
@@ -153,15 +176,21 @@ public final class GlobalShortcutManager {
         if !requiredPressed {
             modifierChordRequiredWasPressed = false
             modifierChordTriggeredDuringPress = false
+            modifierChordBlockedUntilRelease = false
             return
         }
 
         if !modifierChordRequiredWasPressed {
             modifierChordRequiredWasPressed = true
             modifierChordTriggeredDuringPress = false
+            modifierChordBlockedUntilRelease = !exactPressed
         }
 
-        guard exactPressed, !modifierChordTriggeredDuringPress else { return }
+        guard exactPressed,
+              !modifierChordBlockedUntilRelease,
+              !modifierChordTriggeredDuringPress else {
+            return
+        }
         modifierChordTriggeredDuringPress = true
         onTrigger?()
     }
@@ -228,13 +257,21 @@ public final class GlobalShortcutManager {
         }
 
         let currentFlags = flags ?? CGEventSource.flagsState(.combinedSessionState)
-        targetModifierWasPressed = ModifierKeyMatcher.modifierIsPressed(trigger: trigger, flags: currentFlags)
+        if let targetKeyCode = trigger.modifierKeyCode {
+            targetModifierWasPressed = ModifierKeyMatcher.sideSpecificModifierIsPressed(
+                flags: currentFlags,
+                keyCode: targetKeyCode
+            )
+        } else {
+            targetModifierWasPressed = ModifierKeyMatcher.modifierIsPressed(trigger: trigger, flags: currentFlags)
+        }
     }
 
     private func syncModifierChordPressedState(flags: CGEventFlags? = nil) {
         guard trigger.kind == .modifierChord else {
             modifierChordRequiredWasPressed = false
             modifierChordTriggeredDuringPress = false
+            modifierChordBlockedUntilRelease = false
             return
         }
 
@@ -243,10 +280,10 @@ public final class GlobalShortcutManager {
             trigger: trigger,
             flags: currentFlags
         )
-        modifierChordTriggeredDuringPress = ModifierKeyMatcher.modifierChordMatches(
-            trigger: trigger,
-            flags: currentFlags
-        )
+        let exactPressed = ModifierKeyMatcher.modifierChordMatches(trigger: trigger, flags: currentFlags)
+        modifierChordBlockedUntilRelease = modifierChordRequiredWasPressed
+            && !exactPressed
+        modifierChordTriggeredDuringPress = exactPressed
     }
 
     @discardableResult

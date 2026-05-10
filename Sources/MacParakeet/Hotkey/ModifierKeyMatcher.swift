@@ -53,7 +53,7 @@ enum ModifierKeyMatcher {
     ) -> Set<UInt16> {
         var changed: Set<UInt16> = []
 
-        for keyCode in sideSpecificModifierMasks.keys {
+        for keyCode in HotkeyTrigger.sideSpecificModifierKeyCodes {
             let wasPressed = sideSpecificModifierIsPressed(flags: previousFlags, keyCode: keyCode)
             let isPressed = sideSpecificModifierIsPressed(flags: currentFlags, keyCode: keyCode)
             if wasPressed != isPressed {
@@ -62,7 +62,7 @@ enum ModifierKeyMatcher {
         }
 
         if previousFlags.contains(.maskSecondaryFn) != currentFlags.contains(.maskSecondaryFn) {
-            changed.insert(63)
+            changed.insert(HotkeyTrigger.canonicalFnKeyCode)
         }
 
         return changed
