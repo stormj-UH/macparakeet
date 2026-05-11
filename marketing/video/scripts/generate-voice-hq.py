@@ -14,9 +14,9 @@ Why Higgs Audio V2:
   - V2.5 update Jan 2026 refined intonation
   - Open weights, runs locally on Apple Silicon via PyTorch MPS
 
-Setup:
-    pip install -r scripts/requirements.txt
-    # ~6-10 GB model downloads on first run
+Setup (one-time, ~6-10 GB model downloads on first run):
+    uv sync                                  # installs deps from pyproject.toml
+    # or with pip:  pip install -e .
 
 Apple Silicon notes:
     Uses PyTorch MPS backend. Expect ~10-30s generation per minute of audio
@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT_DIR = ROOT / "src" / "assets" / "audio"
+OUT_DIR = ROOT / "public" / "audio"
 SCRIPT_DUMP = ROOT / "src" / "content" / "script.json"
 
 MODEL_NAME = os.environ.get(
@@ -94,7 +94,8 @@ def main() -> int:
     except ImportError as exc:
         print(
             f"Missing dependency ({exc.name}). Install with:\n"
-            f"    pip install -r {ROOT / 'scripts' / 'requirements.txt'}",
+            f"    cd {ROOT} && uv sync\n"
+            f"    # or: pip install -e .",
             file=sys.stderr,
         )
         return 1

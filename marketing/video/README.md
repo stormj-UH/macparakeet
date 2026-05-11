@@ -29,25 +29,46 @@ Requires Node 20+.
 The Kokoro model (~80MB at q8) downloads on first `npm run voice`. No
 account, no API key.
 
+For the Higgs Audio V2 premium upgrade, also run:
+
+```sh
+uv sync                # creates .venv, installs Higgs deps from pyproject.toml
+# or:  pip install -e .
+```
+
+[`uv`](https://github.com/astral-sh/uv) is recommended — dramatically
+faster than pip and handles the PyTorch wheel selection for Apple Silicon
+correctly. Install it once via `curl -LsSf https://astral.sh/uv/install.sh | sh`.
+
 ## Workflow
 
 ```sh
 # Interactive preview in the browser (Remotion Studio)
 npm run preview
 
-# Generate voiceover from the locked script — Kokoro (pure Node)
+# Audition Kokoro voices — generates ~8 short test clips you can listen to
+npm run audition
+
+# Generate full voiceover from the locked script (Kokoro, pure Node)
 npm run voice
 npm run voice -- master-demo            # only one scene
 
-# Render the Hook composition (the validation spike) — 1080p
-npm run render:hook
+# Premium upgrade — Higgs Audio V2 (Python via uv)
+npm run voice:hq
 
-# Render the Hook composition at 4K
+# Render compositions — 1080p
+npm run render:hook         # 5s validation spike
+npm run render:hero         # 30s autoplay-muted hero loop
+npm run render:demo         # 60s master demo
+
+# 4K variants
 npm run render:hook-4k
+npm run render:hero-4k
+npm run render:demo-4k
 ```
 
-Outputs: `src/assets/audio/*.wav` for voice, `out/*.mp4` for video.
-Both are gitignored.
+Outputs: `public/audio/*.wav` for voice, `out/*.mp4` for video. Both
+gitignored. Screencasts (when captured) go in `public/screencasts/`.
 
 ## Voice (TTS)
 
@@ -91,7 +112,11 @@ TTS pipeline can produce the same set of WAV files.
 ```
 marketing/video/
 ├── package.json
+├── pyproject.toml              # uv config for the Higgs Audio HQ path
 ├── remotion.config.ts          # quality defaults (CRF 16, h264, 60fps)
+├── public/                     # gitignored — Remotion staticFile() root
+│   ├── audio/                  # voice WAVs (npm run voice)
+│   └── screencasts/            # raw screen captures (Screen Studio)
 ├── src/
 │   ├── index.ts                # Remotion entrypoint
 │   ├── Root.tsx                # composition registry
@@ -99,32 +124,40 @@ marketing/video/
 │   │   ├── script.ts           # ⭐ the locked script — single source of truth
 │   │   └── script.json         # auto-generated mirror for Python (gitignored)
 │   ├── compositions/
-│   │   └── Hook.tsx            # 5s validation spike
+│   │   ├── Hook.tsx            # 5s validation spike
+│   │   ├── HeroLoop30.tsx      # 30s autoplay-muted hero
+│   │   └── Demo60.tsx          # 60s master demo
 │   ├── components/
 │   │   ├── HookReveal.tsx      # staggered word reveal
-│   │   └── ParakeetMark.tsx    # animated brand mark
-│   ├── theme/
-│   │   └── tokens.ts           # imports from brand-assets/palette
-│   └── assets/                 # screencasts/, audio/ — gitignored
+│   │   ├── ParakeetMark.tsx    # animated brand mark
+│   │   ├── ScreencastSlot.tsx  # <Video> with branded placeholder fallback
+│   │   ├── LowerThird.tsx      # caption strip
+│   │   └── Closing.tsx         # final card (mark + headline + URL)
+│   └── theme/
+│       └── tokens.ts           # imports from brand-assets/palette
 └── scripts/
     ├── generate-voice.ts       # default: Kokoro-82M via kokoro-js (Node)
-    ├── generate-voice-hq.py    # premium: Higgs Audio V2 (Python)
-    ├── dump-script.ts          # exports SCRIPT to JSON for Python
-    └── requirements.txt        # Python deps for the HQ pipeline
+    ├── generate-voice-hq.py    # premium: Higgs Audio V2 (Python via uv)
+    ├── audition-voices.ts      # generates shortlist for picking a voice
+    └── dump-script.ts          # exports SCRIPT to JSON for Python
 ```
 
 ## Currently scaffolded
 
 - ✅ `Hook` — 5s reveal of the locked hook + supporting line (validation spike)
+- ✅ `HeroLoop30` — 30s autoplay-muted hero (silent, captions carry)
+- ✅ `Demo60` — 60s master demo with per-scene audio + screencast slots
 - ✅ Kokoro-82M voiceover pipeline (pure Node, per-scene regeneration)
-- ✅ Higgs Audio V2 upgrade path (Python, optional, premium quality)
+- ✅ Voice audition script — generates curated shortlist for picking a voice
+- ✅ Higgs Audio V2 upgrade path (Python via uv, optional, premium quality)
+- ✅ Reusable components: `ScreencastSlot`, `LowerThird`, `Closing`
 
 ## Roadmap
 
-- ⏳ `Demo60` — 60s master demo with VO + screencast composition
-- ⏳ `HeroLoop30` — 30s autoplay-muted hero for macparakeet.com
+- ⏳ Capture screencasts (Screen Studio, four clips: cold open + 3 modes)
 - ⏳ `SocialVertical15` — 9:16 portrait social cut
 - ⏳ Mode-specific GIF clips (Dictation, YouTube, Meeting, Export)
+- ⏳ F5-TTS voice clone of the founder's voice (most authentic option)
 
 See `docs/marketing.md` for the full storyboard.
 

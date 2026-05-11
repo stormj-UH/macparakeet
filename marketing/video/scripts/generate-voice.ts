@@ -50,7 +50,7 @@ const VOICE = process.env.KOKORO_VOICE ?? 'af_bella';
 // q8 = 8-bit quantized: good quality, ~80MB model, fast on CPU.
 // Use "fp32" for absolute maximum quality (slower, larger).
 const DTYPE = (process.env.KOKORO_DTYPE ?? 'q8') as 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16';
-const OUT_DIR = path.resolve(__dirname, '../src/assets/audio');
+const OUT_DIR = path.resolve(__dirname, '../public/audio');
 
 interface VoiceJob {
   name: string;
