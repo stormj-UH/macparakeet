@@ -2,8 +2,10 @@
 
 Programmatic rendering for every MacParakeet marketing asset — demos,
 hero loops, social cuts, GIFs. Built with [Remotion](https://www.remotion.dev)
-for composition and [ElevenLabs](https://elevenlabs.io) for voice. Every
-asset is regeneratable from a single source: `src/content/script.ts`.
+for composition and **100% local TTS** for voice (Kokoro-82M by default,
+Higgs Audio V2 as the premium-quality upgrade path). Every asset is
+regeneratable from a single source: `src/content/script.ts`. No cloud
+APIs, no per-render cost, no telemetry — same posture as the product.
 
 The locked human-readable spec lives at [`docs/marketing.md`](../../docs/marketing.md).
 
@@ -19,10 +21,13 @@ on the next `npm run render`. Marketing moves at engineering velocity.
 ```sh
 cd marketing/video
 npm install
-cp .env.example .env   # then paste your ElevenLabs API key
+cp .env.example .env   # optional — defaults are sane
 ```
 
 Requires Node 20+.
+
+The Kokoro model (~80MB at q8) downloads on first `npm run voice`. No
+account, no API key.
 
 ## Workflow
 
@@ -30,8 +35,9 @@ Requires Node 20+.
 # Interactive preview in the browser (Remotion Studio)
 npm run preview
 
-# Generate voiceover from the locked script
+# Generate voiceover from the locked script — Kokoro (pure Node)
 npm run voice
+npm run voice -- master-demo            # only one scene
 
 # Render the Hook composition (the validation spike) — 1080p
 npm run render:hook
@@ -40,7 +46,45 @@ npm run render:hook
 npm run render:hook-4k
 ```
 
-Outputs land in `out/` (gitignored).
+Outputs: `src/assets/audio/*.wav` for voice, `out/*.mp4` for video.
+Both are gitignored.
+
+## Voice (TTS)
+
+**Default: Kokoro-82M via `kokoro-js`.** #1 open-weight TTS on the
+[Artificial Analysis leaderboard](https://artificialanalysis.ai/text-to-speech/leaderboard)
+(ELO 1059). 82M params, MIT license, pure Node, no Python, no cloud.
+Studio-quality on calm/measured delivery — which matches MacParakeet's
+brand voice ("calm, confident, minimal, slight warmth"). Generates ~30s
+of audio in under a second on M-series CPUs.
+
+Audition voices from the catalog at the top of `scripts/generate-voice.ts`.
+Switch with `KOKORO_VOICE=af_sarah npm run voice`.
+
+### Premium upgrade — Higgs Audio V2
+
+For hero-cut renders where you want SOTA naturalness, multi-speaker
+dialog, or emotional range, the project ships an optional second
+pipeline using [Higgs Audio V2](https://github.com/boson-ai/higgs-audio)
+— currently the #1 trending TTS on HuggingFace (Llama 3.2 3B base,
+pretrained on 10M+ hours of audio, naturalness 9.5/10).
+
+```sh
+pip install -r scripts/requirements.txt   # one-time, downloads ~6-10GB model
+npm run voice:hq                          # uses Higgs instead of Kokoro
+```
+
+Runs on Apple Silicon via PyTorch MPS. Generation is slower than Kokoro
+(~10-30s per minute of audio on M2 Pro/M3/M4) but quality is the
+current open-weight ceiling.
+
+### Future — F5-TTS voice cloning
+
+For the ultimate authenticity, [F5-TTS](https://github.com/SWivid/F5-TTS)
+can clone Daniel's voice from a 5-15 second reference recording, then
+generate every voiceover line in his actual voice via local AI. Not wired
+up yet, but the file paths in `src/assets/audio/` are model-agnostic — any
+TTS pipeline can produce the same set of WAV files.
 
 ## Architecture
 
@@ -52,7 +96,8 @@ marketing/video/
 │   ├── index.ts                # Remotion entrypoint
 │   ├── Root.tsx                # composition registry
 │   ├── content/
-│   │   └── script.ts           # ⭐ the locked script — single source of truth
+│   │   ├── script.ts           # ⭐ the locked script — single source of truth
+│   │   └── script.json         # auto-generated mirror for Python (gitignored)
 │   ├── compositions/
 │   │   └── Hook.tsx            # 5s validation spike
 │   ├── components/
@@ -62,13 +107,17 @@ marketing/video/
 │   │   └── tokens.ts           # imports from brand-assets/palette
 │   └── assets/                 # screencasts/, audio/ — gitignored
 └── scripts/
-    └── generate-voice.ts       # ElevenLabs voiceover generator
+    ├── generate-voice.ts       # default: Kokoro-82M via kokoro-js (Node)
+    ├── generate-voice-hq.py    # premium: Higgs Audio V2 (Python)
+    ├── dump-script.ts          # exports SCRIPT to JSON for Python
+    └── requirements.txt        # Python deps for the HQ pipeline
 ```
 
 ## Currently scaffolded
 
 - ✅ `Hook` — 5s reveal of the locked hook + supporting line (validation spike)
-- ✅ ElevenLabs voiceover pipeline (CLI script, regenerable per scene)
+- ✅ Kokoro-82M voiceover pipeline (pure Node, per-scene regeneration)
+- ✅ Higgs Audio V2 upgrade path (Python, optional, premium quality)
 
 ## Roadmap
 

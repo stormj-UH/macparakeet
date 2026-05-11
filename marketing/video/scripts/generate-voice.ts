@@ -1,8 +1,19 @@
 #!/usr/bin/env tsx
 /**
- * Generate voiceover audio via the ElevenLabs API.
+ * Generate voiceover audio via Kokoro-82M, 100% local.
  *
- * Reads SCRIPT (`src/content/script.ts`) and writes MP3 files per scene
+ * Why Kokoro?
+ *   - #1 open-weight TTS on the Artificial Analysis leaderboard (ELO 1059)
+ *   - 82M params, MIT licensed, runs anywhere
+ *   - Pure Node via kokoro-js — no Python, no model-download dance
+ *   - Studio-quality on calm/measured delivery, which is the brand voice
+ *
+ * For dramatic / multi-speaker / emotional renders, see the Higgs Audio V2
+ * upgrade path in `generate-voice-hq.py`.
+ * For voice cloning from a reference recording, see the F5-TTS roadmap
+ * note in marketing/video/README.md.
+ *
+ * Reads SCRIPT (`src/content/script.ts`) and writes WAV files per scene
  * plus a master demo voiceover into `src/assets/audio/`. Files are
  * gitignored — regenerate on demand whenever the script changes.
  *
@@ -11,29 +22,35 @@
  *   npm run voice -- mode-dictation       # only one scene
  *   npm run voice -- master-demo          # only the long-form master VO
  *
- * Requires ELEVENLABS_API_KEY in `.env`. See `.env.example`.
- *
  * Voice direction:
- *   Calm, confident, minimal. Slight warmth. Never the default robotic preset.
- *   See docs/brand-identity.md § Brand Voice.
+ *   Default voice is `af_bella` — warm, calm, professional. Override via
+ *   KOKORO_VOICE env var. Brand voice is "calm, confident, minimal,
+ *   slight warmth" — see docs/brand-identity.md § Brand Voice.
+ *
+ * Voice catalog (English presets shipped with Kokoro v1.0):
+ *   American Female: af_alloy, af_aoede, af_bella, af_heart, af_jessica,
+ *                    af_kore, af_nicole, af_nova, af_river, af_sarah, af_sky
+ *   American Male:   am_adam, am_echo, am_eric, am_fenrir, am_liam,
+ *                    am_michael, am_onyx, am_puck, am_santa
+ *   British Female:  bf_alice, bf_emma, bf_isabella, bf_lily
+ *   British Male:    bm_daniel, bm_fable, bm_george, bm_lewis
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KokoroTTS } from 'kokoro-js';
 import { SCRIPT } from '../src/content/script.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const API_KEY = process.env.ELEVENLABS_API_KEY;
-// Default voice: "Rachel" — calm/professional. Override via ELEVENLABS_VOICE_ID.
-const VOICE_ID = process.env.ELEVENLABS_VOICE_ID ?? '21m00Tcm4TlvDq8ikWAM';
-const MODEL_ID = process.env.ELEVENLABS_MODEL_ID ?? 'eleven_turbo_v2_5';
+const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+const VOICE = process.env.KOKORO_VOICE ?? 'af_bella';
+// q8 = 8-bit quantized: good quality, ~80MB model, fast on CPU.
+// Use "fp32" for absolute maximum quality (slower, larger).
+const DTYPE = (process.env.KOKORO_DTYPE ?? 'q8') as 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16';
 const OUT_DIR = path.resolve(__dirname, '../src/assets/audio');
-
-const endpoint = (voiceId: string) =>
-  `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
 
 interface VoiceJob {
   name: string;
@@ -58,45 +75,6 @@ const jobs: VoiceJob[] = [
   },
 ];
 
-async function renderVoice(job: VoiceJob): Promise<void> {
-  if (!API_KEY) {
-    throw new Error(
-      'ELEVENLABS_API_KEY missing. Copy .env.example to .env and add your key.',
-    );
-  }
-
-  const res = await fetch(endpoint(VOICE_ID), {
-    method: 'POST',
-    headers: {
-      'xi-api-key': API_KEY,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    body: JSON.stringify({
-      text: job.text,
-      model_id: MODEL_ID,
-      // Tuned for calm/measured delivery. Adjust per-scene if needed.
-      voice_settings: {
-        stability: 0.55,
-        similarity_boost: 0.75,
-        style: 0.15,
-        use_speaker_boost: true,
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`ElevenLabs API ${res.status}: ${err}`);
-  }
-
-  const buf = Buffer.from(await res.arrayBuffer());
-  await fs.mkdir(OUT_DIR, { recursive: true });
-  const outPath = path.join(OUT_DIR, `${job.name}.mp3`);
-  await fs.writeFile(outPath, buf);
-  console.log(`✓ ${job.name} → ${path.relative(process.cwd(), outPath)}`);
-}
-
 async function main(): Promise<void> {
   const requested = process.argv.slice(2);
   const toRun =
@@ -112,8 +90,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  console.log(`Loading Kokoro-82M (${DTYPE}, voice=${VOICE})…`);
+  const tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: DTYPE });
+  console.log('Model ready.\n');
+
+  await fs.mkdir(OUT_DIR, { recursive: true });
+
   for (const job of toRun) {
-    await renderVoice(job);
+    const start = Date.now();
+    const audio = await tts.generate(job.text, { voice: VOICE });
+    const outPath = path.join(OUT_DIR, `${job.name}.wav`);
+    await audio.save(outPath);
+    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+    console.log(
+      `✓ ${job.name.padEnd(20)} → ${path.relative(process.cwd(), outPath)} (${elapsed}s)`,
+    );
   }
 }
 

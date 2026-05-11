@@ -5,9 +5,17 @@ out/
 *.log
 .DS_Store
 
+# Auto-generated JSON mirror of src/content/script.ts (consumed by the
+# Higgs Audio Python pipeline). Regenerated on demand via `npm run script:dump`.
+src/content/script.json
+
 # Raw screencasts and generated voiceovers are large binaries.
 # Track via Git LFS or external storage if needed.
 src/assets/screencasts/*.mov
 src/assets/screencasts/*.mp4
 src/assets/audio/*.mp3
 src/assets/audio/*.wav
+
+# Python venv if user creates one for the HQ pipeline
+.venv/
+__pycache__/

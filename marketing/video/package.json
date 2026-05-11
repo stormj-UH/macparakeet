@@ -2,20 +2,22 @@
   "name": "macparakeet-video",
   "version": "0.1.0",
   "private": true,
-  "description": "MacParakeet marketing video pipeline. Programmatic rendering via Remotion + ElevenLabs.",
+  "description": "MacParakeet marketing video pipeline. Programmatic rendering via Remotion + local TTS (Kokoro-82M, optional Higgs Audio V2).",
   "type": "module",
   "scripts": {
     "preview": "remotion studio src/index.ts",
     "render:hook": "remotion render src/index.ts Hook out/hook.mp4",
     "render:hook-4k": "remotion render src/index.ts Hook out/hook-4k.mp4 --scale=2",
     "voice": "tsx scripts/generate-voice.ts",
-    "voice:hook": "tsx scripts/generate-voice.ts master-demo",
+    "voice:hq": "tsx scripts/dump-script.ts && python3 scripts/generate-voice-hq.py",
+    "script:dump": "tsx scripts/dump-script.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.0",
     "@remotion/cli": "^4.0.0",
     "@remotion/renderer": "^4.0.0",
+    "kokoro-js": "^1.2.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "remotion": "^4.0.0"

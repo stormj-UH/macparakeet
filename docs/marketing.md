@@ -44,7 +44,7 @@ you have" wedge in one breath.
 
 ## 60-Second Master Demo Script
 
-Render target: 1920×1080 @ 60fps. Voice via ElevenLabs (programmatic).
+Render target: 1920×1080 @ 60fps. Voice via Kokoro-82M by default (or Higgs Audio V2 for premium renders) — both 100% local.
 
 ### 0:00 – 0:03 · Cold open (no narration)
 **Visual:** Tight shot of hands on MacBook keyboard. Fn key tap (visible). Cursor blinking in a Slack thread. Mid-sentence dictation appearing live, character by character.
@@ -189,11 +189,16 @@ MacParakeet is the only Mac voice app that captures meetings (system audio + mic
 
 ## Production Stack
 
+100% local, 100% free, 100% open. The marketing pipeline embodies the same
+"local-first, no subscriptions" thesis as the product itself.
+
 | Layer | Tool | Cost |
 |---|---|---|
 | Native app capture | Screen Studio | $90 one-time |
 | Composition + render | Remotion (`marketing/video/`) | Free for solo |
-| Voice generation | ElevenLabs API via `scripts/generate-voice.ts` | Per-use |
+| Voice (default) | **Kokoro-82M** via `kokoro-js` — top open-weight TTS on Artificial Analysis (ELO 1059), MIT licensed, pure Node, ~80MB | Free, local |
+| Voice (premium upgrade) | **Higgs Audio V2** via Python — #1 trending on HuggingFace, Llama 3.2 3B foundation, naturalness 9.5/10, multi-speaker | Free, local |
+| Voice (future) | **F5-TTS** voice clone of the actual founder's voice from a 5-15s reference | Free, local |
 | Music | Pixabay / Mixkit royalty-free | Free |
 | Caption font (render) | Inter (Google Fonts) | Free |
 | GIF conversion | `ffmpeg` from rendered MP4 | Free |
@@ -203,7 +208,8 @@ MacParakeet is the only Mac voice app that captures meetings (system audio + mic
 - **Resolution:** 1920×1080 minimum for landscape; 4K (3840×2160) for hero loop
 - **Frame rate:** 60fps
 - **Audio:** 48kHz, 16-bit minimum, mastered to -16 LUFS for web
-- **Voice:** ElevenLabs `eleven_turbo_v2_5` or better. Calm, professional, slight warmth. Never the default robotic preset.
+- **Voice (default):** Kokoro-82M at `q8` precision, `af_bella` or audition equivalent. Calm, measured, slight warmth. Top open-weight TTS by Artificial Analysis ranking.
+- **Voice (premium):** Higgs Audio V2 with the brand-voice system prompt when SOTA quality matters (hero renders, multi-speaker scenes). Never the default robotic preset of any model.
 - **Music:** ducked under VO; never overpowers. -18 dB under voice.
 - **Type:** anti-aliased, kerned, never below 32pt
 - **Motion:** springs (`damping ~15`, `stiffness ~100`), never linear interpolations
@@ -211,7 +217,9 @@ MacParakeet is the only Mac voice app that captures meetings (system audio + mic
 
 ## Iteration Discipline
 
-Every change to copy lives here first. Then `marketing/video/src/content/script.ts` is updated to match. Then voices are regenerated (`npm run voice`). Then videos are re-rendered (`npm run render:all`). This is a one-way flow: docs → code → audio → video. Never edit a `.mp4` directly.
+Every change to copy lives here first. Then `marketing/video/src/content/script.ts` is updated to match. Then voices are regenerated (`npm run voice`, or `npm run voice:hq` for the Higgs upgrade). Then videos are re-rendered. This is a one-way flow: **docs → code → audio → video**. Never edit a `.mp4` directly.
+
+The local TTS choice is deliberate: regeneration is free and offline, so iteration cost is zero. Tweaking a single word in a VO line does not cost an API call or a recording session — it costs about a second of CPU time.
 
 ---
 

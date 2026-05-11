@@ -1,0 +1,14 @@
+# Higgs Audio V2 (premium TTS upgrade path).
+# Only needed if you run `npm run voice:hq` — the default Kokoro pipeline is pure Node.
+# Install with:  pip install -r scripts/requirements.txt
+
+# Pin to a recent Higgs Audio V2 release.
+# Repo: https://github.com/boson-ai/higgs-audio
+git+https://github.com/boson-ai/higgs-audio.git@main
+
+# Core deps; pip will pull these via higgs-audio but listed explicitly so
+# Apple Silicon users get the right wheels.
+torch>=2.4
+torchaudio>=2.4
+transformers>=4.45
+accelerate>=0.34
