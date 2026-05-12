@@ -86,7 +86,7 @@ Examples of when departing from the scaffolding is the right call:
   it safe?"
 - **Doc-only commit**: a single paragraph explaining the editorial
   intent often beats the full template.
-- **Multi-fix bugfix with disputed findings**: a "## What Changed"
+- **Multi-fix bugfix with refuted findings**: a "## What Changed"
   list of numbered fixes + a "## Refuted" section for the findings
   you rejected with reasoning is often more useful than the standard
   Root Intent / Prompt split.
