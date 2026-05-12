@@ -38,8 +38,8 @@ For comprehensive commits — multi-file UX polish, architectural moves,
 new features, anything where a future reader will need more than a
 glance — the following structure usually works:
 
-```
-<title>: short summary in imperative mood (under 70 chars)
+```text
+<title> (imperative mood, under 70 chars; `subject: detail` form is fine)
 
 ## What Changed
 What changed in the diff, grouped into themes when there are several.
@@ -128,19 +128,28 @@ section:
 These commits on `main` demonstrate the spirit at different scales.
 Read them with `git show <hash>`:
 
-- **Comprehensive UI polish** — `94f53067` (Polish Transforms spike
-  pill). Four themed subsections, quantitative reasoning for each
-  design knob, internal-pattern anchoring throughout, mathematical
-  detail for the rose curve, decoupling rationale.
-- **Multi-fix bugfix with refuted findings** — `be9757e2` (Address
-  bot-review correctness bugs on Transforms spike). Six numbered
-  fixes on safety-critical paths, each with the failure mode named;
-  three "Refuted" findings with reasoning; explicit Root Intent
-  about why this set of fixes ships together.
-- **Feature introduction behind a flag** — `75d8c1a4` (Add Transforms
-  AX-coverage spike). Multi-file feature wired end-to-end, each file
-  characterized by its specific role and the AX/clipboard fallback
-  design preserved in the prompt section.
+- **Comprehensive UI polish** — `6e7b61b5` (Polish Stats sub-tab:
+  brand glyph, rich hover popover, coral pill picker). Many themed
+  bullets covering picker chrome, heatmap hover popover, today's
+  breathing pulse, typography unification — each with quantitative
+  design rationale (cell size 12pt → 16pt, breathing-pulse 1.8s
+  ease-in-out, empty-cell `opacity(0.07)` vs near-invisible
+  `surfaceElevated` in dark mode). Internal-pattern anchoring
+  throughout (matched-geometry pill, brand accent, `design:
+  .rounded` typography).
+- **Multi-fix bugfix addressing review feedback** — `e2af13d7`
+  (Round 2 review: rename(2) commit, persist-then-delete, Sendable
+  tests). Three numbered fixes on safety-critical concurrency paths,
+  each with the failure mode named (POSIX `rename(2)` atomicity,
+  persist-then-delete ordering to prevent orphaned m4a + dangling
+  webm row, `@Sendable` closure capture hazard fixed via reference-
+  type wrappers).
+- **Feature introduction with schema migration** — `0442a2f4` (Split
+  Dictations into History + Stats sub-tabs with daily streak
+  heatmap). Multi-component feature with a v0.11 SQLite migration,
+  schema decisions explained alongside UI rationale, prior decisions
+  cross-referenced (mirrors #124's trade-off for surviving Clear
+  History), 19 new repository tests characterized by scenario.
 - **Short, well-articulated** — `f6edccc7` (Warn that Best-available
   YouTube audio breaks in-app playback). Three sentences. No
   template. Gives a future reader full understanding of why the
@@ -150,7 +159,7 @@ Read them with `git show <hash>`:
 
 ### Comprehensive (feature)
 
-```
+```text
 Add dictation overlay with waveform visualization
 
 ## What Changed
@@ -185,16 +194,19 @@ subscribe to audio levels.
 - ADR-001 + ADR-007: Parakeet TDT model with FluidAudio CoreML runtime
 
 ## Files Changed
-- Sources/MacParakeet/Views/Dictation/DictationOverlayView.swift (+145)
-- Sources/MacParakeet/Views/Dictation/WaveformView.swift (+62)
+- Sources/MacParakeet/Views/Dictation/DictationOverlayView.swift
+  (+145) — borderless NSPanel + state-driven layout.
+- Sources/MacParakeet/Views/Dictation/WaveformView.swift (+62) —
+  real-time waveform rendering from audio-level data.
 - Sources/MacParakeetCore/Services/Dictation/DictationService.swift
-  (+28, ~12)
-- Tests/MacParakeetTests/DictationServiceTests.swift (+34)
+  (+28, ~12) — new `audioLevelPublisher` exposed to the overlay.
+- Tests/MacParakeetTests/DictationServiceTests.swift (+34) —
+  audio-level callback registration tests.
 ```
 
 ### Targeted bug fix
 
-```
+```text
 Fix clipboard not restoring after dictation paste
 
 ## What Changed
@@ -214,7 +226,7 @@ original.
 
 ### Short
 
-```
+```text
 Warn that Best-available YouTube audio breaks in-app playback
 
 AVPlayer on macOS can't decode WebM/Opus, which is what yt-dlp picks
