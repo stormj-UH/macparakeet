@@ -144,6 +144,7 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
     private let liveChunkTranscriber: LiveChunkTranscriber
     private let lockFileStore: MeetingRecordingLockFileStoring
     private let speechEngineSessionManager: (any SpeechEngineSessionManaging)?
+    private let micConditionerFactory: @Sendable () -> any MicConditioning
 
     private var currentSession: Session?
     /// Buffer-discard flag for pause/resume. Reset in `cleanupState`.
@@ -214,11 +215,36 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
         lockFileStore: MeetingRecordingLockFileStoring = MeetingRecordingLockFileStore(),
         fileManager: FileManager = .default
     ) {
+        self.init(
+            micProcessingMode: micProcessingMode,
+            audioCaptureService: audioCaptureService,
+            audioConverter: audioConverter,
+            sttTranscriber: sttTranscriber,
+            lockFileStore: lockFileStore,
+            fileManager: fileManager,
+            micConditionerFactory: {
+                PassthroughMicConditioner()
+            }
+        )
+    }
+
+    init(
+        micProcessingMode: MeetingMicProcessingMode = .raw,
+        audioCaptureService: any MeetingAudioCapturing,
+        audioConverter: any AudioFileConverting = AudioFileConverter(),
+        sttTranscriber: STTTranscribing,
+        lockFileStore: MeetingRecordingLockFileStoring = MeetingRecordingLockFileStore(),
+        fileManager: FileManager = .default,
+        micConditionerFactory: @escaping @Sendable () -> any MicConditioning = {
+            PassthroughMicConditioner()
+        }
+    ) {
         self.requestedMicProcessingMode = micProcessingMode
         self.audioCaptureService = audioCaptureService
         self.audioConverter = audioConverter
         self.lockFileStore = lockFileStore
         self.fileManager = fileManager
+        self.micConditionerFactory = micConditionerFactory
         self.liveChunkTranscriber = LiveChunkTranscriber(sttTranscriber: sttTranscriber)
         self.speechEngineSessionManager = sttTranscriber as? any SpeechEngineSessionManaging
     }
@@ -334,7 +360,8 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
             self.latestLevels = MeetingAudioLevels()
             await captureOrchestrator.reset()
             try await validateStartStillCurrent(session)
-            micConditioner = PassthroughMicConditioner()
+            micConditioner = micConditionerFactory()
+            micConditioner.reset()
             transcriptAssembler.reset()
             isTranscriptionLagging = false
             captureFailed = false
@@ -570,6 +597,9 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
                 writerMetrics: writerMetrics,
                 captureFailed: captureFailed
             )
+        )
+        AudioCaptureDiagnostics.append(
+            echoSuppressionSummaryLine(session: session)
         )
         cleanupState()
         return output
@@ -904,13 +934,6 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
     }
 
     private func configureMicConditioner(from report: MeetingAudioCaptureStartReport) {
-        // Mic processing is owned by macOS Voice Processing I/O upstream of
-        // this service; the conditioner is now always a no-op pass-through.
-        // The branching here is purely diagnostic — VPIO failing to engage
-        // means the user's mic stream is raw (speaker bleed possible) so we
-        // warn loudly to surface the case in telemetry.
-        micConditioner = PassthroughMicConditioner()
-
         guard report.microphoneStarted else {
             logger.info(
                 "meeting_mic_conditioner_skipped source_mode=\(report.sourceMode.rawValue, privacy: .public)"
@@ -921,11 +944,11 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
         let microphone = report.microphone
         if microphone.fellBackToRaw {
             logger.warning(
-                "meeting_mic_vpio_unavailable requested=\(String(describing: microphone.requestedMode), privacy: .public) effective=raw requested_policy=\(String(describing: self.requestedMicProcessingMode), privacy: .public) — mic stream is raw, speaker echo will not be cancelled"
+                "meeting_mic_vpio_unavailable requested=\(String(describing: microphone.requestedMode), privacy: .public) effective=raw requested_policy=\(String(describing: self.requestedMicProcessingMode), privacy: .public) echo_processor=\(self.micConditioner.diagnostics.processorName, privacy: .public)"
             )
         } else {
             logger.info(
-                "meeting_mic_processing requested=\(String(describing: microphone.requestedMode), privacy: .public) effective=\(microphone.effectiveMode.rawValue, privacy: .public)"
+                "meeting_mic_processing requested=\(String(describing: microphone.requestedMode), privacy: .public) effective=\(microphone.effectiveMode.rawValue, privacy: .public) echo_processor=\(self.micConditioner.diagnostics.processorName, privacy: .public)"
             )
         }
     }
@@ -1114,6 +1137,23 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
             "transcription_failures=\(captureHealthMetrics.transcriptionFailures)",
             "interrupted_sources=\(interruptedSourceLabel.isEmpty ? "none" : interruptedSourceLabel)",
             "capture_failed=\(captureFailed)",
+        ].joined(separator: " ")
+    }
+
+    private func echoSuppressionSummaryLine(session: Session) -> String {
+        let diagnostics = micConditioner.diagnostics
+        return [
+            "meeting_echo_suppression_summary",
+            "session=\(session.id.uuidString)",
+            "processor=\(diagnostics.processorName)",
+            "loaded=\(diagnostics.loaded)",
+            "mic_frames=\(diagnostics.micFrames)",
+            "processed_frames=\(diagnostics.processedFrames)",
+            "raw_fallback_frames=\(diagnostics.rawFallbackFrames)",
+            "full_reference_frames=\(diagnostics.fullReferenceFrames)",
+            "partial_reference_frames=\(diagnostics.partialReferenceFrames)",
+            "missing_reference_frames=\(diagnostics.missingReferenceFrames)",
+            "processing_failures=\(diagnostics.processingFailures)",
         ].joined(separator: " ")
     }
 
