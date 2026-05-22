@@ -175,10 +175,13 @@ expected.
 
 Expected assets:
 
-- native runtime library: `liblocalvqe*.dylib`
+- native runtime library: `liblocalvqe.dylib`
 - dependent native libraries: likely GGML-related dylibs
 - model: `localvqe-v1.2-1.3M-f32.gguf`
-- Swift/C bridge target for loading and frame processing
+- Swift dynamic-loader bridge for `localvqe_new`,
+  `localvqe_process_frame_f32`, `localvqe_reset`, and `localvqe_free`
+- 16 kHz mono Float32 processing with the runtime-reported hop length
+  (currently 256 samples)
 
 Release requirements:
 

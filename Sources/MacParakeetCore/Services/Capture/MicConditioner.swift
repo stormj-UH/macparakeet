@@ -11,9 +11,12 @@ struct MeetingEchoSuppressionDiagnostics: Sendable, Equatable {
     var missingReferenceFrames: Int
     var processingFailures: Int
 
-    static func passthrough(loaded: Bool = true) -> MeetingEchoSuppressionDiagnostics {
+    static func passthrough(
+        processorName: String = "passthrough",
+        loaded: Bool = true
+    ) -> MeetingEchoSuppressionDiagnostics {
         MeetingEchoSuppressionDiagnostics(
-            processorName: "passthrough",
+            processorName: processorName,
             loaded: loaded,
             micFrames: 0,
             processedFrames: 0,
@@ -50,14 +53,28 @@ extension MicConditioning {
 /// mic capture and only enables model-backed cleanup when a local processor is
 /// explicitly configured and loaded.
 final class PassthroughMicConditioner: MicConditioning, @unchecked Sendable {
-    private(set) var diagnostics = MeetingEchoSuppressionDiagnostics.passthrough()
+    private let processorName: String
+    private let loaded: Bool
+    private(set) var diagnostics: MeetingEchoSuppressionDiagnostics
+
+    init(processorName: String = "passthrough", loaded: Bool = true) {
+        self.processorName = processorName
+        self.loaded = loaded
+        self.diagnostics = MeetingEchoSuppressionDiagnostics.passthrough(
+            processorName: processorName,
+            loaded: loaded
+        )
+    }
 
     func condition(microphone: [Float], speaker: [Float], hasSpeakerReference: Bool) -> [Float] {
         microphone
     }
 
     func reset() {
-        diagnostics = MeetingEchoSuppressionDiagnostics.passthrough()
+        diagnostics = MeetingEchoSuppressionDiagnostics.passthrough(
+            processorName: processorName,
+            loaded: loaded
+        )
     }
 }
 

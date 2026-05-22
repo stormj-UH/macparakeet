@@ -213,7 +213,8 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
         audioConverter: any AudioFileConverting = AudioFileConverter(),
         sttTranscriber: STTTranscribing,
         lockFileStore: MeetingRecordingLockFileStoring = MeetingRecordingLockFileStore(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        echoSuppressionConfiguration: MeetingEchoSuppressionConfiguration = .fromEnvironment()
     ) {
         self.init(
             micProcessingMode: micProcessingMode,
@@ -223,7 +224,9 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
             lockFileStore: lockFileStore,
             fileManager: fileManager,
             micConditionerFactory: {
-                PassthroughMicConditioner()
+                MeetingEchoSuppressionFactory.makeConditioner(
+                    configuration: echoSuppressionConfiguration
+                )
             }
         )
     }
@@ -235,9 +238,7 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
         sttTranscriber: STTTranscribing,
         lockFileStore: MeetingRecordingLockFileStoring = MeetingRecordingLockFileStore(),
         fileManager: FileManager = .default,
-        micConditionerFactory: @escaping @Sendable () -> any MicConditioning = {
-            PassthroughMicConditioner()
-        }
+        micConditionerFactory: @escaping @Sendable () -> any MicConditioning
     ) {
         self.requestedMicProcessingMode = micProcessingMode
         self.audioCaptureService = audioCaptureService
