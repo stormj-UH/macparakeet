@@ -387,6 +387,12 @@ public final class LLMSettingsViewModel {
         }
     }
 
+    public func saveAndTestConfiguration() {
+        saveConfiguration()
+        guard case .saved = saveState, canTestConnection else { return }
+        testConnection()
+    }
+
     public func testConnection() {
         guard let llmClient else { return }
 

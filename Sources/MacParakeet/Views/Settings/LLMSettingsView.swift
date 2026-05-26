@@ -5,17 +5,16 @@ import MacParakeetViewModels
 struct LLMSettingsView: View {
     @Bindable var viewModel: LLMSettingsViewModel
 
-    @State private var showAdvanced = false
+    @State private var showAdvancedSetup = false
+    @State private var showOptionalToken = false
+    @State private var showConnectionSettings = false
+    @State private var cloudProviderChoice: LLMProviderID = .anthropic
 
-    private static let providerOrder: [LLMProviderID] = [
-        .lmstudio,
-        .ollama,
+    private static let cloudProviderOrder: [LLMProviderID] = [
         .anthropic,
         .openai,
         .gemini,
         .openrouter,
-        .openaiCompatible,
-        .localCLI,
     ]
 
     var body: some View {
@@ -24,147 +23,25 @@ struct LLMSettingsView: View {
 
             Divider()
 
-            selectedAIOptionSection
+            localAIAppSection
+
+            Divider()
+
+            apiKeySection
+
+            Divider()
+
+            advancedSetupSection
 
             if viewModel.selectedProviderID != nil {
                 Divider()
 
-                // API key (hidden for providers that cannot use one)
-                if viewModel.supportsAPIKey {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("API Key")
-                                .font(DesignSystem.Typography.body)
-                            Text(
-                                viewModel.requiresAPIKey
-                                    ? "Your key is stored securely in the macOS Keychain."
-                                    : "Optional. Leave blank for servers that do not require authentication."
-                            )
-                                .font(DesignSystem.Typography.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: DesignSystem.Spacing.md)
-                        SecureField(viewModel.apiKeyPlaceholder, text: $viewModel.apiKeyInput)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 220)
-                    }
-
-                    Divider()
-                }
-
-                if viewModel.selectedProviderID == .localCLI {
-                    cliSettingsSection
-                } else {
-                    if viewModel.selectedProviderID?.requiresCustomEndpoint == true {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Custom Endpoint")
-                                    .font(DesignSystem.Typography.body)
-                                Text("OpenAI-compatible base URL, for example https://api.example.com/v1.")
-                                    .font(DesignSystem.Typography.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: DesignSystem.Spacing.md)
-                            TextField(viewModel.baseURLPlaceholder, text: $viewModel.baseURLOverride)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 220)
-                        }
-
-                        Divider()
-                    }
-
-                    // Model name
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Model")
-                                .font(DesignSystem.Typography.body)
-                            Text("The model to use for AI features.")
-                                .font(DesignSystem.Typography.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: DesignSystem.Spacing.md)
-                        modelPicker
-                    }
-
-                    // Advanced: Base URL override
-                    if viewModel.selectedProviderID?.requiresCustomEndpoint != true {
-                        DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Base URL")
-                                        .font(DesignSystem.Typography.body)
-                                    Text("Override the default API endpoint.")
-                                        .font(DesignSystem.Typography.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer(minLength: DesignSystem.Spacing.md)
-                                TextField(viewModel.baseURLPlaceholder, text: $viewModel.baseURLOverride)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 220)
-                            }
-                            .padding(.top, DesignSystem.Spacing.sm)
-                        }
-                        .font(DesignSystem.Typography.caption)
-                    }
-                }
-
-                Divider()
-
-                privacyInfo
-
-                Divider()
-
-                // Test connection + status
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    Button("Test Connection") {
-                        viewModel.testConnection()
-                    }
-                    .parakeetAction(.secondary)
-                    .disabled(viewModel.connectionTestState == .testing || !viewModel.canTestConnection)
-
-                    connectionStatusIndicator
-
-                    Spacer()
-                }
-
-                if let validationMessage = viewModel.validationMessage {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(DesignSystem.Colors.warningAmber)
-                        Text(validationMessage)
-                            .font(DesignSystem.Typography.caption)
-                            .foregroundStyle(DesignSystem.Colors.warningAmber)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                selectedConfigurationSection
             }
 
             Divider()
 
             aiFormatterSection
-
-            Divider()
-
-            // Save / Clear
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                Button("Save") {
-                    viewModel.saveConfiguration()
-                }
-                .parakeetAction(.primaryProminent)
-                .disabled(!viewModel.canSave)
-
-                if viewModel.isConfigured {
-                    Button("Clear", role: .destructive) {
-                        viewModel.clearConfiguration()
-                    }
-                    .parakeetAction(.destructive)
-                }
-
-                saveStateIndicator
-
-                Spacer()
-            }
         }
     }
 
@@ -182,7 +59,7 @@ struct LLMSettingsView: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text("AI for summaries, chat, meeting Ask, and Transforms")
+                Text("AI for summaries and chat")
                     .font(DesignSystem.Typography.body.weight(.semibold))
                     .foregroundStyle(DesignSystem.Colors.textPrimary)
                 Text(setupStatusCopy(for: status))
@@ -193,51 +70,460 @@ struct LLMSettingsView: View {
 
             Spacer(minLength: DesignSystem.Spacing.md)
 
-            if case .ready = status {
-                Text("Ready")
-                    .font(DesignSystem.Typography.caption.weight(.medium))
-                    .foregroundStyle(DesignSystem.Colors.successGreen)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(DesignSystem.Colors.successGreen.opacity(0.10)))
+            switch status {
+            case .ready:
+                SettingsStatusChip(status: .ok, label: "Ready")
+            case .cannotConnect:
+                SettingsStatusChip(status: .recommended, label: "Check setup")
+            case .setUpNeeded:
+                SettingsStatusChip(status: .info, label: "Optional")
             }
         }
     }
 
-    private var selectedAIOptionSection: some View {
-        VStack(spacing: DesignSystem.Spacing.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Current choice")
-                        .font(DesignSystem.Typography.body)
-                    Text("Choose a local provider, an API key, or a command-line AI tool.")
-                        .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: DesignSystem.Spacing.md)
-                Picker("AI option", selection: $viewModel.selectedProviderID) {
-                    Text("None").tag(LLMProviderID?.none)
-                    ForEach(Self.providerOrder, id: \.self) { provider in
-                        Text(provider.displayName).tag(Optional(provider))
+    private var localAIAppSection: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            setupSectionHeader(
+                title: "Use a local AI app",
+                detail: "Best privacy path. Run AI on this Mac with LM Studio or Ollama."
+            )
+
+            setupPathRow(
+                icon: "desktopcomputer",
+                title: "LM Studio",
+                badge: "Recommended",
+                detail: "Friendliest local setup. Start its local server, then MacParakeet can find loaded models.",
+                providerID: .lmstudio,
+                actionLabel: "Use LM Studio"
+            )
+
+            Divider()
+
+            setupPathRow(
+                icon: "terminal",
+                title: "Ollama",
+                badge: nil,
+                detail: "Local models for users who already run Ollama or prefer a command-line install.",
+                providerID: .ollama,
+                actionLabel: "Use Ollama"
+            )
+        }
+    }
+
+    private var apiKeySection: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            setupSectionHeader(
+                title: "Use an API key",
+                detail: "Use Claude, OpenAI, Gemini, or OpenRouter. Audio stays local; transcript text is sent only when you run an AI action."
+            )
+
+            HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    .frame(width: 24, height: 24)
+
+                Picker("AI service", selection: cloudProviderBinding) {
+                    ForEach(Self.cloudProviderOrder, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
                     }
                 }
-                .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 190)
-            }
+                .frame(width: 210)
 
-            if viewModel.selectedProviderID == nil {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Local providers, API keys, and command-line tools are available from this menu.")
-                        .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Dictation, transcription, and meeting recording work without AI setup.")
-                        .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(.secondary)
+                Spacer(minLength: DesignSystem.Spacing.md)
+
+                if let providerID = viewModel.selectedProviderID,
+                   Self.cloudProviderOrder.contains(providerID) {
+                    SettingsStatusChip(status: .info, label: "Selected")
+                } else {
+                    Button {
+                        viewModel.selectedProviderID = cloudProviderChoice
+                    } label: {
+                        Label("Use API key", systemImage: "key")
+                    }
+                    .parakeetAction(.secondary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private var advancedSetupSection: some View {
+        DisclosureGroup(isExpanded: $showAdvancedSetup) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                setupPathRow(
+                    icon: "network",
+                    title: "OpenAI-compatible endpoint",
+                    badge: nil,
+                    detail: "Connect another API or local server that speaks the OpenAI chat completions format.",
+                    providerID: .openaiCompatible,
+                    actionLabel: "Use endpoint"
+                )
+
+                Divider()
+
+                setupPathRow(
+                    icon: "terminal",
+                    title: "Command-line AI tool",
+                    badge: nil,
+                    detail: "Run Claude Code, Codex, or a custom command when MacParakeet needs AI.",
+                    providerID: .localCLI,
+                    actionLabel: "Use CLI"
+                )
+            }
+            .padding(.top, DesignSystem.Spacing.sm)
+        } label: {
+            setupSectionHeader(
+                title: "Advanced setup",
+                detail: "Custom endpoints and command-line AI tools for power users."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func setupSectionHeader(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(DesignSystem.Typography.body.weight(.semibold))
+                .foregroundStyle(DesignSystem.Colors.textPrimary)
+            Text(detail)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func setupPathRow(
+        icon: String,
+        title: String,
+        badge: String?,
+        detail: String,
+        providerID: LLMProviderID,
+        actionLabel: String
+    ) -> some View {
+        HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(setupPathTint(for: providerID))
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(title)
+                        .font(DesignSystem.Typography.body)
+                    if let badge {
+                        Text(badge)
+                            .font(DesignSystem.Typography.micro.weight(.semibold))
+                            .foregroundStyle(DesignSystem.Colors.accentDark)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(DesignSystem.Colors.accent.opacity(0.12)))
+                    }
+                }
+                Text(detail)
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: DesignSystem.Spacing.md)
+
+            if viewModel.selectedProviderID == providerID {
+                SettingsStatusChip(status: .info, label: "Selected")
+            } else {
+                Button {
+                    viewModel.selectedProviderID = providerID
+                } label: {
+                    Label(actionLabel, systemImage: "arrow.right")
+                }
+                .parakeetAction(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var selectedConfigurationSection: some View {
+        VStack(spacing: DesignSystem.Spacing.md) {
+            HStack(alignment: .top, spacing: DesignSystem.Spacing.md) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Setup details")
+                        .font(DesignSystem.Typography.body.weight(.semibold))
+                    Text(selectedConfigurationDetail)
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: DesignSystem.Spacing.md)
+                selectedProviderChip
+            }
+
+            if viewModel.supportsAPIKey && viewModel.selectedProviderID != .lmstudio {
+                Divider()
+                apiKeyRow
+            }
+
+            if viewModel.selectedProviderID == .localCLI {
+                Divider()
+                cliSettingsSection
+            } else {
+                Divider()
+                modelRow
+
+                if let localModelSetupHint {
+                    localModelHintRow(localModelSetupHint)
+                }
+
+                if viewModel.selectedProviderID == .lmstudio {
+                    DisclosureGroup("Optional token", isExpanded: $showOptionalToken) {
+                        apiKeyRow
+                            .padding(.top, DesignSystem.Spacing.sm)
+                    }
+                    .font(DesignSystem.Typography.caption)
+                }
+
+                Divider()
+                connectionSettingsSection
+            }
+
+            Divider()
+
+            privacyInfo
+
+            Divider()
+
+            selectedConfigurationActions
+
+            if let validationMessage = viewModel.validationMessage {
+                validationMessageRow(validationMessage)
+            }
+        }
+    }
+
+    private var localModelSetupHint: String? {
+        guard viewModel.canRefreshModelList, viewModel.discoveredModelCount == 0 else { return nil }
+        switch viewModel.selectedProviderID {
+        case .lmstudio:
+            return "Open LM Studio, load a model, start the local server, then refresh models."
+        case .ollama:
+            return "Start Ollama, install a model, then refresh models."
+        default:
+            return nil
+        }
+    }
+
+    private func localModelHintRow(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "info.circle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(DesignSystem.Colors.textSecondary)
+            Text(message)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var cloudProviderBinding: Binding<LLMProviderID> {
+        Binding(
+            get: {
+                if let providerID = viewModel.selectedProviderID,
+                   Self.cloudProviderOrder.contains(providerID) {
+                    return providerID
+                }
+                return cloudProviderChoice
+            },
+            set: { providerID in
+                cloudProviderChoice = providerID
+                if let selectedProviderID = viewModel.selectedProviderID,
+                   Self.cloudProviderOrder.contains(selectedProviderID) {
+                    viewModel.selectedProviderID = providerID
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedProviderChip: some View {
+        if let providerID = viewModel.selectedProviderID {
+            SettingsStatusChip(
+                status: providerID.isLocal ? .ok : .info,
+                label: providerID.displayName
+            )
+        }
+    }
+
+    private var selectedConfigurationDetail: String {
+        switch viewModel.selectedProviderID {
+        case .lmstudio:
+            return "Use LM Studio's local server. Choose a detected model, then save and test."
+        case .ollama:
+            return "Use your local Ollama models. MacParakeet can refresh the installed model list."
+        case .localCLI:
+            return "Choose a preset command or enter a custom command for AI requests."
+        case .openaiCompatible:
+            return "Enter the endpoint and model for an OpenAI-compatible service."
+        case .anthropic, .openai, .gemini, .openrouter:
+            return "Enter your API key and choose a model. Keys are stored in Keychain."
+        case nil:
+            return ""
+        }
+    }
+
+    private var apiKeyRow: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.requiresAPIKey ? "API Key" : "Optional API Key")
+                    .font(DesignSystem.Typography.body)
+                Text(
+                    viewModel.requiresAPIKey
+                        ? "Stored securely in the macOS Keychain."
+                        : "Leave blank for local servers that do not require authentication."
+                )
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: DesignSystem.Spacing.md)
+            SecureField(viewModel.apiKeyPlaceholder, text: $viewModel.apiKeyInput)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+        }
+    }
+
+    private var modelRow: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Model")
+                    .font(DesignSystem.Typography.body)
+                Text(modelRowDetail)
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: DesignSystem.Spacing.md)
+            modelPicker
+        }
+    }
+
+    private var modelRowDetail: String {
+        switch viewModel.selectedProviderID {
+        case .lmstudio:
+            return "Pick a model loaded in LM Studio."
+        case .ollama:
+            return "Pick an installed Ollama model, or use a recommended default."
+        default:
+            return "The model to use for AI features."
+        }
+    }
+
+    @ViewBuilder
+    private var connectionSettingsSection: some View {
+        if viewModel.selectedProviderID?.requiresCustomEndpoint == true {
+            endpointRow
+        } else {
+            DisclosureGroup("Advanced connection settings", isExpanded: $showConnectionSettings) {
+                endpointRow
+                    .padding(.top, DesignSystem.Spacing.sm)
+            }
+            .font(DesignSystem.Typography.caption)
+        }
+    }
+
+    private var endpointRow: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.selectedProviderID?.requiresCustomEndpoint == true ? "Endpoint" : "Base URL")
+                    .font(DesignSystem.Typography.body)
+                Text(
+                    viewModel.selectedProviderID?.requiresCustomEndpoint == true
+                        ? "OpenAI-compatible base URL, for example https://api.example.com/v1."
+                        : "Override the default endpoint only if your AI app or service uses a custom address."
+                )
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: DesignSystem.Spacing.md)
+            TextField(viewModel.baseURLPlaceholder, text: $viewModel.baseURLOverride)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+        }
+    }
+
+    private var selectedConfigurationActions: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            HStack(alignment: .top) {
+                Button {
+                    viewModel.saveAndTestConfiguration()
+                } label: {
+                    Label("Save and Test", systemImage: "checkmark.circle")
+                }
+                .parakeetAction(.primaryProminent)
+                .disabled(!viewModel.canSave || viewModel.connectionTestState == .testing)
+
+                Button {
+                    viewModel.testConnection()
+                } label: {
+                    Label("Test", systemImage: "bolt")
+                }
+                .parakeetAction(.secondary)
+                .disabled(viewModel.connectionTestState == .testing || !viewModel.canTestConnection)
+
+                if viewModel.canRefreshModelList {
+                    Button {
+                        viewModel.refreshAvailableModels()
+                    } label: {
+                        Label("Refresh Models", systemImage: "arrow.clockwise")
+                    }
+                    .parakeetAction(.secondary)
+                    .disabled(viewModel.isLoadingModelList)
+                }
+
+                Spacer()
+            }
+
+            HStack(alignment: .top) {
+                if viewModel.isConfigured {
+                    Button(role: .destructive) {
+                        viewModel.selectedProviderID = nil
+                        viewModel.saveConfiguration()
+                    } label: {
+                        Label("Turn Off AI", systemImage: "power")
+                    }
+                    .parakeetAction(.destructive)
+                } else {
+                    Button {
+                        viewModel.selectedProviderID = nil
+                    } label: {
+                        Label("Not Now", systemImage: "xmark")
+                    }
+                    .parakeetAction(.secondary)
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: DesignSystem.Spacing.sm) {
+                connectionStatusIndicator
+                saveStateIndicator
+
+                Spacer()
+            }
+        }
+    }
+
+    private func validationMessageRow(_ message: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(DesignSystem.Colors.warningAmber)
+            Text(message)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(DesignSystem.Colors.warningAmber)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func setupPathTint(for providerID: LLMProviderID) -> Color {
+        viewModel.selectedProviderID == providerID ? DesignSystem.Colors.accent : DesignSystem.Colors.textSecondary
     }
 
     private func setupStatusIcon(for status: LLMSettingsViewModel.AISetupStatus) -> String {
@@ -265,7 +551,7 @@ struct LLMSettingsView: View {
     private func setupStatusCopy(for status: LLMSettingsViewModel.AISetupStatus) -> String {
         switch status {
         case .setUpNeeded:
-            return "Choose how MacParakeet should run AI features. Transcription, dictation, and meeting recording still work without this."
+            return "Recording and transcription work now. Turn on AI for summaries, chat, meeting Ask, and Transforms."
         case .ready(let displayName):
             return "Ready: using \(displayName)."
         case .cannotConnect(let displayName, let message):
@@ -296,34 +582,22 @@ struct LLMSettingsView: View {
                 .frame(minWidth: 180)
             }
 
-            HStack(spacing: 10) {
-                if viewModel.useCustomModel {
-                    if viewModel.canChooseModelFromList {
-                        Button("Choose from list") {
-                            viewModel.useCustomModel = false
-                        }
-                        .buttonStyle(.plain)
-                        .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Button("Use custom model") {
-                        viewModel.useCustomModel = true
+            if viewModel.useCustomModel {
+                if viewModel.canChooseModelFromList {
+                    Button("Choose from list") {
+                        viewModel.useCustomModel = false
                     }
                     .buttonStyle(.plain)
                     .font(DesignSystem.Typography.caption)
                     .foregroundStyle(.secondary)
                 }
-
-                if viewModel.canRefreshModelList {
-                    Button(viewModel.isLoadingModelList ? "Refreshing..." : "Refresh list") {
-                        viewModel.refreshAvailableModels()
-                    }
-                    .buttonStyle(.plain)
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(.secondary)
-                    .disabled(viewModel.isLoadingModelList)
+            } else {
+                Button("Use custom model") {
+                    viewModel.useCustomModel = true
                 }
+                .buttonStyle(.plain)
+                .font(DesignSystem.Typography.caption)
+                .foregroundStyle(.secondary)
             }
 
             if let errorMessage = viewModel.modelListErrorMessage {

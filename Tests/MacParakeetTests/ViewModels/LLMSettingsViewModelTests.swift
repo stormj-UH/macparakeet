@@ -301,6 +301,22 @@ final class LLMSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(mockConfigStore.config?.modelName, "gemini-3-flash-preview")
     }
 
+    func testSaveAndTestPersistsDraftBeforeTesting() async throws {
+        viewModel.configure(configStore: mockConfigStore, llmClient: mockClient)
+        viewModel.selectedProviderID = .openai
+        viewModel.apiKeyInput = "sk-test"
+        viewModel.modelName = "gpt-5-mini"
+
+        viewModel.saveAndTestConfiguration()
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(viewModel.saveState, .saved)
+        XCTAssertEqual(viewModel.connectionTestState, .success)
+        XCTAssertEqual(mockConfigStore.config?.id, .openai)
+        XCTAssertEqual(mockConfigStore.config?.modelName, "gpt-5-mini")
+        XCTAssertEqual(mockClient.capturedContext?.providerConfig.modelName, "gpt-5-mini")
+    }
+
     func testConnectionFailure() async throws {
         mockClient.testConnectionError = LLMError.authenticationFailed(nil)
         viewModel.configure(configStore: mockConfigStore, llmClient: mockClient)
