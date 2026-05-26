@@ -72,11 +72,35 @@ open-source projects and local SDK headers.
 
 | Project | Reviewed commit | Relevant files |
 |---|---:|---|
-| Steno | `d3849f463851` | [`mic-monitor/mic_monitor.swift`](https://github.com/ruzin/stenoai/blob/main/mic-monitor/mic_monitor.swift), [`app/main.js`](https://github.com/ruzin/stenoai/blob/main/app/main.js) |
-| Hyprnote / Anarlog | `58040f6df7df` | [`crates/detect`](https://github.com/fastrepl/hyprnote/tree/main/crates/detect), [`plugins/detect`](https://github.com/fastrepl/hyprnote/tree/main/plugins/detect) |
-| Muesli | `8016b1d47199` | [`MeetingDetector.swift`](https://github.com/pHequals7/muesli/blob/main/native/MuesliNative/Sources/MuesliNativeApp/MeetingDetector.swift), [`MeetingCandidateResolver.swift`](https://github.com/pHequals7/muesli/blob/main/native/MuesliNative/Sources/MuesliNativeApp/MeetingCandidateResolver.swift), [`AudioProcessAttributionCollector.swift`](https://github.com/pHequals7/muesli/blob/main/native/MuesliNative/Sources/MuesliNativeApp/AudioProcessAttributionCollector.swift), [`MeetingPromptStateMachine.swift`](https://github.com/pHequals7/muesli/blob/main/native/MuesliNative/Sources/MuesliNativeApp/MeetingPromptStateMachine.swift), [`CameraActivityMonitor.swift`](https://github.com/pHequals7/muesli/blob/main/native/MuesliNative/Sources/MuesliNativeApp/CameraActivityMonitor.swift) |
-| OpenOats | `eff5a63c1fa3` | [`MeetingDetector.swift`](https://github.com/yazinsai/OpenOats/blob/main/OpenOats/Sources/OpenOats/Meeting/MeetingDetector.swift), [`CameraActivityMonitor.swift`](https://github.com/yazinsai/OpenOats/blob/main/OpenOats/Sources/OpenOats/Meeting/CameraActivityMonitor.swift), [`MeetingDetectionController.swift`](https://github.com/yazinsai/OpenOats/blob/main/OpenOats/Sources/OpenOats/App/MeetingDetectionController.swift), [`NotificationService.swift`](https://github.com/yazinsai/OpenOats/blob/main/OpenOats/Sources/OpenOats/Meeting/NotificationService.swift) |
-| OpenWhispr | `19b066c8b31a` | [`resources/macos-mic-listener.swift`](https://github.com/OpenWhispr/openwhispr/blob/main/resources/macos-mic-listener.swift), [`src/helpers/meetingDetectionEngine.js`](https://github.com/OpenWhispr/openwhispr/blob/main/src/helpers/meetingDetectionEngine.js), [`src/helpers/audioActivityDetector.js`](https://github.com/OpenWhispr/openwhispr/blob/main/src/helpers/audioActivityDetector.js), [`src/helpers/meetingProcessDetector.js`](https://github.com/OpenWhispr/openwhispr/blob/main/src/helpers/meetingProcessDetector.js) |
+| Steno | `d3849f463851` | [`mic-monitor/mic_monitor.swift`](https://github.com/ruzin/stenoai/blob/d3849f463851ca1900463c62449baf12e7288b5a/mic-monitor/mic_monitor.swift), [`app/main.js`](https://github.com/ruzin/stenoai/blob/d3849f463851ca1900463c62449baf12e7288b5a/app/main.js) |
+| Hyprnote / Anarlog | `58040f6df7df` | [`crates/detect`](https://github.com/fastrepl/hyprnote/tree/58040f6df7df415e20935d6062704e19856bd34a/crates/detect), [`plugins/detect`](https://github.com/fastrepl/hyprnote/tree/58040f6df7df415e20935d6062704e19856bd34a/plugins/detect) |
+| Muesli | `8016b1d47199` | [`MeetingDetector.swift`](https://github.com/pHequals7/muesli/blob/8016b1d4719936566a27cfef5b4d5ca01a2f6e89/native/MuesliNative/Sources/MuesliNativeApp/MeetingDetector.swift), [`MeetingCandidateResolver.swift`](https://github.com/pHequals7/muesli/blob/8016b1d4719936566a27cfef5b4d5ca01a2f6e89/native/MuesliNative/Sources/MuesliNativeApp/MeetingCandidateResolver.swift), [`AudioProcessAttributionCollector.swift`](https://github.com/pHequals7/muesli/blob/8016b1d4719936566a27cfef5b4d5ca01a2f6e89/native/MuesliNative/Sources/MuesliNativeApp/AudioProcessAttributionCollector.swift), [`MeetingPromptStateMachine.swift`](https://github.com/pHequals7/muesli/blob/8016b1d4719936566a27cfef5b4d5ca01a2f6e89/native/MuesliNative/Sources/MuesliNativeApp/MeetingPromptStateMachine.swift), [`CameraActivityMonitor.swift`](https://github.com/pHequals7/muesli/blob/8016b1d4719936566a27cfef5b4d5ca01a2f6e89/native/MuesliNative/Sources/MuesliNativeApp/CameraActivityMonitor.swift) |
+| OpenOats | `eff5a63c1fa3` | [`MeetingDetector.swift`](https://github.com/yazinsai/OpenOats/blob/eff5a63c1fa3f4f4ff6ddaf703d7298a170f3d73/OpenOats/Sources/OpenOats/Meeting/MeetingDetector.swift), [`CameraActivityMonitor.swift`](https://github.com/yazinsai/OpenOats/blob/eff5a63c1fa3f4f4ff6ddaf703d7298a170f3d73/OpenOats/Sources/OpenOats/Meeting/CameraActivityMonitor.swift), [`MeetingDetectionController.swift`](https://github.com/yazinsai/OpenOats/blob/eff5a63c1fa3f4f4ff6ddaf703d7298a170f3d73/OpenOats/Sources/OpenOats/App/MeetingDetectionController.swift), [`NotificationService.swift`](https://github.com/yazinsai/OpenOats/blob/eff5a63c1fa3f4f4ff6ddaf703d7298a170f3d73/OpenOats/Sources/OpenOats/Meeting/NotificationService.swift) |
+| OpenWhispr | `19b066c8b31a` | [`resources/macos-mic-listener.swift`](https://github.com/OpenWhispr/openwhispr/blob/19b066c8b31afdd32514e3693ec18eaaa3010bb9/resources/macos-mic-listener.swift), [`src/helpers/meetingDetectionEngine.js`](https://github.com/OpenWhispr/openwhispr/blob/19b066c8b31afdd32514e3693ec18eaaa3010bb9/src/helpers/meetingDetectionEngine.js), [`src/helpers/audioActivityDetector.js`](https://github.com/OpenWhispr/openwhispr/blob/19b066c8b31afdd32514e3693ec18eaaa3010bb9/src/helpers/audioActivityDetector.js), [`src/helpers/meetingProcessDetector.js`](https://github.com/OpenWhispr/openwhispr/blob/19b066c8b31afdd32514e3693ec18eaaa3010bb9/src/helpers/meetingProcessDetector.js) |
+
+Official Apple references checked:
+
+- [Core Audio](https://developer.apple.com/documentation/CoreAudio) and
+  [`kAudioProcessPropertyBundleID`](https://developer.apple.com/documentation/coreaudio/kaudioprocesspropertybundleid)
+  confirm the public `AudioHardwareProcess` surface and its related process
+  properties, including PID, bundle ID, devices, input state, and output state.
+- [`AudioObjectAddPropertyListenerBlock`](https://developer.apple.com/documentation/coreaudio/audioobjectaddpropertylistenerblock%28_%3A_%3A_%3A_%3A%29)
+  is the public property-listener mechanism for waking the adapter on hardware
+  state changes.
+- [`kAudioDevicePropertyDeviceIsRunningSomewhere`](https://developer.apple.com/documentation/coreaudio/kaudiodevicepropertydeviceisrunningsomewhere)
+  is public CoreAudio device activity state.
+- [`kCMIODevicePropertyDeviceIsRunningSomewhere`](https://developer.apple.com/documentation/coremediaio/kcmiodevicepropertydeviceisrunningsomewhere)
+  is public CoreMediaIO camera activity state.
+- [`NSWorkspace.runningApplications`](https://developer.apple.com/documentation/appkit/nsworkspace/runningapplications)
+  and [`frontmostApplication`](https://developer.apple.com/documentation/appkit/nsworkspace/frontmostapplication)
+  are public AppKit surfaces for app snapshots and frontmost-app context.
+- [Declaring actionable notification types](https://developer.apple.com/documentation/usernotifications/declaring-your-actionable-notification-types)
+  and [`UNNotificationCategory.actions`](https://developer.apple.com/documentation/usernotifications/unnotificationcategory/actions)
+  define the official notification action model and banner action limits.
+- [Accessing the event store](https://developer.apple.com/documentation/eventkit/accessing-the-event-store)
+  and [`EKEventStoreChangedNotification`](https://developer.apple.com/documentation/eventkit/ekeventstorechangednotification)
+  confirm the existing calendar permission/refetch model this activity plan
+  must not disturb.
 
 SDK feasibility was checked against the installed macOS SDK:
 
@@ -90,6 +114,26 @@ SDK feasibility was checked against the installed macOS SDK:
 
 These are public SDK headers. Avoid designs that depend on private KVC keys or
 parsing Control Center logs.
+
+Grounding notes:
+
+- The CoreAudio process properties are appropriate for attribution, but the
+  default-input "running somewhere" device listener should be treated as a
+  wake-up signal. The authoritative candidate evidence should come from a
+  process snapshot.
+- `NSWorkspace.runningApplications` can be called from any thread, but Apple
+  says changes arrive when the main run loop runs in a common mode and
+  recommends KVO instead of tight polling. The app adapter should observe and
+  snapshot rather than spin.
+- EventKit objects are stale after `EKEventStoreChangedNotification`; existing
+  calendar code already refetches. Activity should consume `CalendarEvent`
+  snapshots from the existing calendar service, not hold `EKEvent` objects.
+- If any future release makes the app sandboxed, Apple requires the Calendar
+  entitlement for reading calendar data. This plan adds no new calendar access;
+  it should reuse the current calendar permission/service path.
+- UserNotifications can support custom actions, but banners display only the
+  first two actions. Do not rely on every prompt action being visible from a
+  notification banner.
 
 ## Competitive Findings
 
@@ -392,6 +436,7 @@ Recommended adapters:
 - `RunningApplicationSnapshotProvider`
   - `NSWorkspace.runningApplications`.
   - Frontmost app.
+  - Observe app-list/frontmost changes where possible; do not tight-poll.
   - Browser/helper normalization where possible.
 - `BrowserMeetingContextProvider`
   - Phase 2/3 only.
@@ -453,6 +498,12 @@ Actions:
 2. `Not a Meeting`
 3. `Mute This App`
 4. Dismiss/close
+
+If this is delivered as a macOS notification, only depend on the first two
+actions being visible in banner presentation. `Start Recording` and `Not a
+Meeting` should be the notification actions. `Mute This App` can live in the
+in-app prompt, a notification detail path, or Settings. Dismiss can be the
+system dismissal affordance.
 
 Behavior:
 
@@ -697,13 +748,16 @@ it needs its own design and tests.
 3. Add `MeetingActivityPromptMode` preference and ignored bundle list.
 4. Add app-layer monitor protocols and fake implementations.
 5. Add CoreAudio process attribution adapter.
-6. Add running/frontmost app snapshot provider.
+6. Add running/frontmost app snapshot provider using observer-driven snapshots.
 7. Add `MeetingActivityStartCoordinator`.
-8. Add prompt UI/notification actions.
+8. Add prompt UI/notification actions, with notification banners limited to
+   the two primary actions.
 9. Add `MeetingRecordingFlowCoordinator.startFromActivity(candidate:)`.
 10. Add telemetry event names and website allowlist entries.
 11. Add manual smoke checklist to the plan or QA docs.
-12. Only then consider Phase 2 camera support.
+12. Re-check official Apple docs and installed SDK headers before relying on
+    any new system signal.
+13. Only then consider Phase 2 camera support.
 
 ## Bottom Line
 
