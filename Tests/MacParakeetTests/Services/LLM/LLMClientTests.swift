@@ -1026,6 +1026,7 @@ final class LLMClientTests: XCTestCase {
                 {"id":"omni-moderation-latest"},
                 {"id":"chatgpt-4o-latest"},
                 {"id":"o2-mini"},
+                {"id":"o10-mini"},
                 {"id":"o4-mini"}
               ]
             }
