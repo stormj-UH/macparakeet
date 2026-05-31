@@ -172,6 +172,9 @@ final class ModelLifecycleCommandTests: XCTestCase {
         XCTAssertEqual(parakeetDownloadVariant(from: "parakeet-v2", defaults: defaults), .v2)
         XCTAssertEqual(parakeetDownloadVariant(from: "parakeet:v3", defaults: defaults), .v3)
         XCTAssertEqual(parakeetDownloadVariant(from: "parakeet-english", defaults: defaults), .v2)
+        // Underscore spellings normalize to hyphens, matching `config set`.
+        XCTAssertEqual(parakeetDownloadVariant(from: "parakeet_v2", defaults: defaults), .v2)
+        XCTAssertEqual(parakeetDownloadVariant(from: "parakeet_english", defaults: defaults), .v2)
         // Bare "parakeet" resolves to the persisted build.
         SpeechEnginePreference.saveParakeetModelVariant(.v2, defaults: defaults)
         XCTAssertEqual(parakeetDownloadVariant(from: "parakeet", defaults: defaults), .v2)

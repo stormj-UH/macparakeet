@@ -485,12 +485,16 @@ func resolveSelectableSpeechModel(
 /// `parakeet-multilingual`, etc. Returns `nil` when `id` isn't a Parakeet
 /// variant selector so the caller can fall through to Whisper parsing.
 private func parseParakeetSelectionVariant(_ lowered: String) -> ParakeetModelVariant? {
+    // Normalize underscores to hyphens so `parakeet_v2` / `parakeet_english`
+    // resolve the same as their hyphenated forms — matching how
+    // `ConfigCommand.parseParakeetModelVariant` canonicalizes the setting.
+    let normalized = lowered.replacingOccurrences(of: "_", with: "-")
     let prefix = SpeechEnginePreference.parakeet.rawValue
     let suffix: String
-    if lowered.hasPrefix("\(prefix):") {
-        suffix = String(lowered.dropFirst(prefix.count + 1))
-    } else if lowered.hasPrefix("\(prefix)-") {
-        suffix = String(lowered.dropFirst(prefix.count + 1))
+    if normalized.hasPrefix("\(prefix):") {
+        suffix = String(normalized.dropFirst(prefix.count + 1))
+    } else if normalized.hasPrefix("\(prefix)-") {
+        suffix = String(normalized.dropFirst(prefix.count + 1))
     } else {
         return nil
     }
