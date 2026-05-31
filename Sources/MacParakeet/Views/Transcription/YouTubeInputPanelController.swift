@@ -67,8 +67,10 @@ final class YouTubeInputPanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.contentView = hosting
 
-        // Center horizontally, upper third vertically (Spotlight-style)
-        if let screen = NSScreen.main {
+        // Center horizontally, upper third vertically (Spotlight-style).
+        // Fall back to the first screen when there is no main screen (a rare
+        // transition state) so the panel never lands at the bottom-left origin.
+        if let screen = NSScreen.main ?? NSScreen.screens.first {
             let screenFrame = screen.visibleFrame
             let x = screenFrame.midX - panelWidth / 2
             let y = screenFrame.origin.y + screenFrame.height * 0.65 - panelHeight / 2
