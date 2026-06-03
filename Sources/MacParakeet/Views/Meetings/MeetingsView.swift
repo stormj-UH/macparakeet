@@ -19,9 +19,6 @@ struct MeetingsView: View {
 
     private static let rightRailWidth: CGFloat = 280
     private static let twoColumnMinimumWidth: CGFloat = 1_100
-    private static let recentMeetingEstimatedRowHeight: CGFloat = 65
-    private static let recentMeetingEstimatedGroupHeaderHeight: CGFloat = 32
-    private static let recentMeetingListMaximumHeight: CGFloat = 540
 
     var body: some View {
         GeometryReader { proxy in
@@ -155,8 +152,8 @@ struct MeetingsView: View {
     private var oneColumnContent: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
             upcomingSection
-            recentMeetingsSection
             attentionSection
+            recentMeetingsSection
             intelligenceSection
             autoNotesSection
             meetingPromptsSection
@@ -409,7 +406,7 @@ struct MeetingsView: View {
                         action: recentMeetingsEmptyAction
                     )
                 } else {
-                    recentMeetingRowsViewport
+                    recentMeetingRows
 
                     if viewModel.recentMeetingsViewModel.hasMore {
                         HStack {
@@ -432,14 +429,6 @@ struct MeetingsView: View {
                 }
             }
         }
-    }
-
-    private var recentMeetingRowsViewport: some View {
-        ScrollView {
-            recentMeetingRows
-        }
-        .scrollIndicators(.visible)
-        .frame(height: recentMeetingRowsViewportHeight)
     }
 
     private var recentMeetingRows: some View {
@@ -546,22 +535,6 @@ struct MeetingsView: View {
 
     private var shouldShowRecentMeetingSearch: Bool {
         !viewModel.recentMeetingsViewModel.transcriptions.isEmpty || !recentMeetingsSearchText.isEmpty
-    }
-
-    private var recentMeetingRowsViewportHeight: CGFloat {
-        min(
-            recentMeetingRowsEstimatedHeight,
-            Self.recentMeetingListMaximumHeight
-        )
-    }
-
-    private var recentMeetingRowsEstimatedHeight: CGFloat {
-        let groups = viewModel.recentMeetingsViewModel.groupedTranscriptions
-        let rowCount = groups.reduce(0) { partial, group in
-            partial + group.items.count
-        }
-        return CGFloat(rowCount) * Self.recentMeetingEstimatedRowHeight
-            + CGFloat(groups.count) * Self.recentMeetingEstimatedGroupHeaderHeight
     }
 
     private var recentMeetingsEmptyIcon: String {
@@ -695,9 +668,16 @@ private struct CalendarInlineControlsRow: View {
     @ViewBuilder
     private var controlsArea: some View {
         if controlsEnabled {
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                calendarModePicker
-                eventFilterPicker
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    calendarModePicker
+                    eventFilterPicker
+                }
+
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                    calendarModePicker
+                    eventFilterPicker
+                }
             }
         } else {
             connectCalendarControls
