@@ -62,6 +62,20 @@ final class MediaPlatformTests: XCTestCase {
         XCTAssertEqual(MediaPlatform.recognize("vimeo.com/76979871"), .vimeo)
     }
 
+    func testRecognizeIsRobustToMessyQueryPortAndUserinfo() {
+        // An unencoded `%` in the query made URLComponents/URL return nil for the
+        // whole string; host parsing must ignore everything after the authority.
+        XCTAssertEqual(MediaPlatform.recognize("https://vimeo.com/76979871?ref=a%b"), .vimeo)
+        // :port in the authority.
+        XCTAssertEqual(MediaPlatform.recognize("https://vimeo.com:443/76979871"), .vimeo)
+        // user:pass@ userinfo prefix.
+        XCTAssertEqual(MediaPlatform.recognize("https://user:pass@www.youtube.com/watch?v=x"), .youtube)
+        // Fragment immediately after the host.
+        XCTAssertEqual(MediaPlatform.recognize("https://x.com#top"), .x)
+        // Absolute-FQDN trailing dot still matches the registrable suffix.
+        XCTAssertEqual(MediaPlatform.recognize("https://www.youtube.com./watch?v=x"), .youtube)
+    }
+
     func testUnrecognizedReturnsNil() {
         XCTAssertNil(MediaPlatform.recognize("https://example.com/video/123"))
         XCTAssertNil(MediaPlatform.recognize("https://news.ycombinator.com"))

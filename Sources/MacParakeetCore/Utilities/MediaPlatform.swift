@@ -115,13 +115,34 @@ public enum MediaPlatform: String, CaseIterable, Sendable, Hashable {
 
     // MARK: - Private
 
+    /// Extracts the lowercased host (registrable authority) from a URL string.
+    ///
+    /// Parsed by hand rather than via `URLComponents`/`URL`, which return `nil` for
+    /// the *whole* string on an unencoded `%` (or other stray character) in the
+    /// query — host recognition must not depend on a clean query/path. The host is
+    /// the only part we need, and it always precedes the first `/ ? #`.
     private static func host(of string: String) -> String? {
-        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return nil }
-        let normalized = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
-        guard let host = URLComponents(string: normalized)?.host?.lowercased(), !host.isEmpty else {
-            return nil
+        var rest = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rest.isEmpty, !rest.contains(where: \.isWhitespace) else { return nil }
+        // Drop the scheme (`https://`, `http://`, …) if present.
+        if let schemeRange = rest.range(of: "://") {
+            rest = String(rest[schemeRange.upperBound...])
         }
-        return host
+        // The authority ends at the first path/query/fragment delimiter.
+        if let end = rest.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) {
+            rest = String(rest[..<end])
+        }
+        // Strip userinfo (`user:pass@`) and any `:port`.
+        if let at = rest.lastIndex(of: "@") {
+            rest = String(rest[rest.index(after: at)...])
+        }
+        if let colon = rest.firstIndex(of: ":") {
+            rest = String(rest[..<colon])
+        }
+        // Drop a single trailing dot — `youtube.com.` is a valid absolute-FQDN form
+        // and should still match the `youtube.com` suffix.
+        if rest.hasSuffix(".") { rest.removeLast() }
+        let host = rest.lowercased()
+        return host.isEmpty ? nil : host
     }
 }

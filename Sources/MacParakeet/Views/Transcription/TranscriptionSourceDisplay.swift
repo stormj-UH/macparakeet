@@ -11,6 +11,7 @@ enum TranscriptionSourceDisplay: Equatable {
     case tiktok
     case instagram
     case podcast
+    case audioURL
     case mediaURL
 
     static func resolve(for transcription: Transcription) -> TranscriptionSourceDisplay {
@@ -34,7 +35,10 @@ enum TranscriptionSourceDisplay: Equatable {
             case .tiktok: return .tiktok
             case .instagram: return .instagram
             case .applePodcasts: return .podcast
-            case .soundcloud, .twitch, .none: return .mediaURL
+            // SoundCloud is audio-first — give it an audio affordance, not the
+            // generic video badge. Twitch / unknown hosts stay video.
+            case .soundcloud: return .audioURL
+            case .twitch, .none: return .mediaURL
             }
         }
     }
@@ -50,6 +54,7 @@ enum TranscriptionSourceDisplay: Equatable {
         case .tiktok: return "TikTok"
         case .instagram: return "Instagram"
         case .podcast: return "Podcast"
+        case .audioURL: return "Audio"
         case .mediaURL: return "Video"
         }
     }
@@ -65,6 +70,7 @@ enum TranscriptionSourceDisplay: Equatable {
         case .tiktok: return "TikTok source"
         case .instagram: return "Instagram source"
         case .podcast: return "Podcast episode"
+        case .audioURL: return "Audio source"
         case .mediaURL: return "Video source"
         }
     }
@@ -76,13 +82,14 @@ enum TranscriptionSourceDisplay: Equatable {
         case .youtube, .x, .vimeo, .facebook, .tiktok, .instagram, .mediaURL:
             return "play.rectangle.fill"
         case .podcast: return "mic.fill"
+        case .audioURL: return "waveform"
         }
     }
 
     var symbolText: String? {
         switch self {
         case .x: return "𝕏"
-        case .meeting, .localFile, .youtube, .vimeo, .facebook, .tiktok, .instagram, .podcast, .mediaURL:
+        case .meeting, .localFile, .youtube, .vimeo, .facebook, .tiktok, .instagram, .podcast, .audioURL, .mediaURL:
             return nil
         }
     }
@@ -105,7 +112,7 @@ enum TranscriptionSourceDisplay: Equatable {
             return DesignSystem.Colors.instagramPink
         case .podcast:
             return DesignSystem.Colors.podcastPurple
-        case .mediaURL:
+        case .audioURL, .mediaURL:
             return DesignSystem.Colors.textSecondary
         }
     }

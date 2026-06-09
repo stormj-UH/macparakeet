@@ -44,7 +44,7 @@ struct YouTubeInputPanelView: View {
         if isValidDraft {
             return "Ready to transcribe this link, entirely on your Mac."
         }
-        return "Works with YouTube, X, Vimeo, TikTok, Instagram, podcasts, and more — on your Mac."
+        return "Works with YouTube, X, Vimeo, TikTok, Instagram, Facebook, podcasts, and more — on your Mac."
     }
 
     var body: some View {

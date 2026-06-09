@@ -43,11 +43,12 @@ struct MediaPlatformOrbitView: View {
             ZStack {
                 guideRing(radius: radius)
                     .opacity(matched == nil ? 0.22 : 0.06)
+                    .animation(fade, value: matched == nil)
 
                 ring(radius: radius, node: node)
                     .opacity(matched == nil ? 1 : 0.14)
                     .blur(radius: matched == nil ? 0 : 1.5)
-                    .animation(.easeInOut(duration: 0.35), value: matched == nil)
+                    .animation(fade, value: matched == nil)
 
                 center(side: side)
             }
@@ -110,7 +111,16 @@ struct MediaPlatformOrbitView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: matched)
+        .animation(bloom, value: matched)
+    }
+
+    /// Reduce Motion gates *all* motion, not just the spin: the ring fade and the
+    /// center bloom resolve instantly when the user has asked for less motion.
+    private var fade: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.35)
+    }
+    private var bloom: Animation? {
+        reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8)
     }
 
     private func heroBadge(platform: MediaPlatform?, tint: Color, side: CGFloat) -> some View {

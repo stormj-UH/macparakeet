@@ -42,8 +42,10 @@ struct PlatformGlyph: View {
         let bodyH = r.height * 0.72
         let body = CGRect(x: r.minX, y: r.midY - bodyH / 2, width: r.width, height: bodyH)
         var path = Path(roundedRect: body, cornerRadius: bodyH * 0.30)
-        let tw = r.width * 0.15
-        let th = bodyH * 0.30
+        // Roughly equilateral play triangle — reads as a play button even at the
+        // ~16pt orbit-chip size (a narrower triangle looks like a spike there).
+        let tw = r.width * 0.22
+        let th = bodyH * 0.24
         var tri = Path()
         tri.move(to: CGPoint(x: r.midX - tw * 0.55, y: r.midY - th))
         tri.addLine(to: CGPoint(x: r.midX - tw * 0.55, y: r.midY + th))
@@ -98,21 +100,24 @@ struct PlatformGlyph: View {
     // MARK: - Facebook — filled circle with a knocked-out "f"
 
     private static func drawFacebook(_ ctx: GraphicsContext, _ r: CGRect, _ color: Color) {
-        ctx.fill(Path(ellipseIn: r), with: .color(color))
-        var knock = ctx
-        knock.blendMode = .destinationOut
-        let stemW = r.width * 0.12
-        let stemX = r.midX + r.width * 0.03
-        let stem = CGRect(x: stemX - stemW / 2, y: r.minY + r.height * 0.28,
-                          width: stemW, height: r.height * 0.52)
-        knock.fill(Path(roundedRect: stem, cornerRadius: stemW * 0.25), with: .color(.black))
-        let crossbar = CGRect(x: stemX - r.width * 0.12, y: r.minY + r.height * 0.42,
-                              width: r.width * 0.26, height: stemW)
-        knock.fill(Path(roundedRect: crossbar, cornerRadius: stemW * 0.3), with: .color(.black))
-        // Top hook: short horizontal arm at the crown of the stem.
-        let hook = CGRect(x: stemX - stemW / 2, y: r.minY + r.height * 0.26,
-                          width: r.width * 0.15, height: stemW)
-        knock.fill(Path(roundedRect: hook, cornerRadius: stemW * 0.3), with: .color(.black))
+        // Draw into an isolated layer so the `.destinationOut` knockout punches the
+        // "f" out of *this circle only* — never the Canvas backing or sibling views.
+        ctx.drawLayer { layer in
+            layer.fill(Path(ellipseIn: r), with: .color(color))
+            layer.blendMode = .destinationOut
+            let stemW = r.width * 0.12
+            let stemX = r.midX + r.width * 0.03
+            let stem = CGRect(x: stemX - stemW / 2, y: r.minY + r.height * 0.28,
+                              width: stemW, height: r.height * 0.52)
+            layer.fill(Path(roundedRect: stem, cornerRadius: stemW * 0.25), with: .color(.black))
+            let crossbar = CGRect(x: stemX - r.width * 0.12, y: r.minY + r.height * 0.42,
+                                  width: r.width * 0.26, height: stemW)
+            layer.fill(Path(roundedRect: crossbar, cornerRadius: stemW * 0.3), with: .color(.black))
+            // Top hook: short horizontal arm at the crown of the stem.
+            let hook = CGRect(x: stemX - stemW / 2, y: r.minY + r.height * 0.26,
+                              width: r.width * 0.15, height: stemW)
+            layer.fill(Path(roundedRect: hook, cornerRadius: stemW * 0.3), with: .color(.black))
+        }
     }
 
     // MARK: - TikTok — stylized eighth note
