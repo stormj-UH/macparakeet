@@ -20,7 +20,13 @@ struct MediaPlatformOrbitView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spin: Double = 0
     @State private var hovering = false
+    /// Guards against a hover re-entry restarting the revolution mid-flight (which
+    /// would stack `+360`s and visibly speed up). One revolution at a time.
+    @State private var revolving = false
 
+    /// The seven marks shown on the ring. SoundCloud and Twitch are recognized and
+    /// have bundled marks, but are intentionally left off the ring (seven spaces the
+    /// circle cleanly); when matched they bloom in the center via the neutral-hero path.
     private let orbitPlatforms: [MediaPlatform] = [
         .youtube, .x, .vimeo, .facebook, .tiktok, .instagram, .applePodcasts,
     ]
@@ -162,10 +168,18 @@ struct MediaPlatformOrbitView: View {
     /// One smooth full revolution, triggered on hover. A single eased animation (not a
     /// `repeatForever` linear loop) has no seam to stutter and — crucially — leaves the
     /// constellation static at rest, so the idle tab does zero per-frame work. No-op
-    /// under Reduce Motion or while a match is bloomed.
+    /// under Reduce Motion, while a match is bloomed, or while already revolving. On
+    /// completion `spin` resets to 0 (visually identical to 360·n for `rotationEffect`),
+    /// keeping it bounded across many hovers.
     private func revolve() {
-        guard !reduceMotion, matched == nil else { return }
-        withAnimation(.easeInOut(duration: 1.4)) { spin += 360 }
+        guard !reduceMotion, matched == nil, !revolving else { return }
+        revolving = true
+        withAnimation(.easeInOut(duration: 1.4)) {
+            spin += 360
+        } completion: {
+            spin = 0
+            revolving = false
+        }
     }
 
     /// Resting angle (degrees) for chip `index`, evenly spaced, first chip at top.
