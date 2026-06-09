@@ -41,12 +41,16 @@ Two parts:
     applePodcasts, soundcloud, twitch, … (+ recognition by host).
   - `static func recognize(_ urlString:) -> MediaPlatform?` — host-based, best-effort.
   - `var displayName: String`.
-  - `static func isTranscribableURL(_:) -> Bool` — the ONE permissive gate that
+  - `static func isTranscribable(_:) -> Bool` — the ONE permissive gate that
     replaces the 4 duplicated OR-chains (podcast OR any http(s) media OR
     scheme-less known host). Consolidation, not new abstraction.
-- **Keep** `YouTubeURLValidator` (dedup), `PodcastURLValidator` (routing),
-  `XURLValidator` (strict /status/ — reused by recognize for X), and
+  - `static func normalizedURLString(_:) -> String` — prepends `https://` to a
+    scheme-less *recognized* host so the download layer (which requires a scheme)
+    accepts everything the gate does.
+- **Keep** `YouTubeURLValidator` (dedup), `PodcastURLValidator` (routing), and
   `DownloadableMediaURLValidator` (generic http(s)).
+- **Delete** `XURLValidator` — accept-all obviates its strict `/status/` gate; X is
+  recognized by host like every other platform.
 
 ### App / UI
 - **NEW `PlatformGlyph`** (`Views/Components/PlatformGlyph.swift`): one simplified,
@@ -55,8 +59,10 @@ Two parts:
   crossing strokes; FB circle+knockout f; IG outlined squircle+lens+dot; Vimeo
   rounded "v"; TikTok eighth-note; Podcasts mic+rings).
 - **NEW `MediaPlatformOrbitView`** (`Views/Transcription/MediaPlatformOrbitView.swift`):
-  the orbiting hero. Inputs: matched `MediaPlatform?`. Slow rotation gated on
-  visibility + window-active + `accessibilityReduceMotion`. Reuses the app's
+  the orbiting hero. Inputs: matched `MediaPlatform?`. Slow rotation is render-
+  server-driven (one `repeatForever` `.rotationEffect`, auto-throttled by the
+  window server when occluded/inactive) and static under
+  `accessibilityReduceMotion`. Reuses the app's
   rosette motif for the core (visual continuity).
 - **DesignSystem**: add brand tints (vimeoBlue, facebookBlue, tiktok, instagramPink;
   reuse youtubeRed/xMark/podcastPurple) + a `MediaPlatform → (tint, glyph)` mapping

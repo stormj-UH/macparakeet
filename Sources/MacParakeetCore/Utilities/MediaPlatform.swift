@@ -110,7 +110,11 @@ public enum MediaPlatform: String, CaseIterable, Sendable, Hashable {
     public static func normalizedURLString(_ string: String) -> String {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains("://") else { return trimmed }
-        return "https://\(trimmed)"
+        // Only a scheme-less *recognized* host should gain a scheme — that is the
+        // only scheme-less form the gate accepts. Anything else is returned
+        // untouched so it can't slip past `transcribeURL()`'s own gate (which
+        // re-checks `isTranscribable` on the normalized string).
+        return recognize(trimmed) != nil ? "https://\(trimmed)" : trimmed
     }
 
     // MARK: - Private

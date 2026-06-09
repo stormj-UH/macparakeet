@@ -157,6 +157,15 @@ final class MediaPlatformTests: XCTestCase {
         XCTAssertEqual(MediaPlatform.normalizedURLString("  tiktok.com/@a/video/1  "), "https://tiktok.com/@a/video/1")
     }
 
+    func testNormalizedURLStringLeavesSchemelessUnrecognizedUntouched() {
+        // Only recognized scheme-less hosts gain a scheme. Arbitrary text or an
+        // unrecognized scheme-less host is returned unchanged, so it still fails
+        // `isTranscribable` downstream (the button must not light up on typed words).
+        XCTAssertEqual(MediaPlatform.normalizedURLString("example.com/video"), "example.com/video")
+        XCTAssertEqual(MediaPlatform.normalizedURLString("just some notes"), "just some notes")
+        XCTAssertFalse(MediaPlatform.isTranscribable(MediaPlatform.normalizedURLString("example.com/video")))
+    }
+
     func testNormalizedURLStringLeavesSchemedAndEmptyUntouched() {
         XCTAssertEqual(MediaPlatform.normalizedURLString("https://vimeo.com/1"), "https://vimeo.com/1")
         XCTAssertEqual(MediaPlatform.normalizedURLString("http://example.com/a.mp4"), "http://example.com/a.mp4")
