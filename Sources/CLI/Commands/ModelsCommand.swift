@@ -327,7 +327,7 @@ extension ModelsCommand {
 
         func run() async throws {
             let sttClient = makeParakeetSTTClient()
-            await sttClient.clearModelCache()
+            try await sttClient.clearModelCache()
             DiarizationService.clearModelCache()
             try? FileManager.default.removeItem(atPath: AppPaths.whisperModelsDir)
             print("Local speech and speaker model caches cleared")

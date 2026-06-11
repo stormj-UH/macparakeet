@@ -53,6 +53,11 @@ public actor STTScheduler: STTManaging, SpeechEngineRoutedTranscribing, SpeechEn
     private var cancelledJobIDs: Set<UUID> = []
     private var acceptsNewJobs = true
     private var activeSpeechEngineSessionIDs: Set<UUID> = []
+    /// True while `clearModelCache` is tearing the runtime down, and
+    /// permanently after `shutdown()`. Distinct from `acceptsNewJobs`, which
+    /// is also false during an ordinary engine switch — a switch must keep
+    /// admitting session leases (they drain it), while a quiesce must not.
+    private var quiescing = false
     private var speechEngineSwitchTask: Task<Void, Error>?
 
     /// - Parameter meetingLiveChunkBacklogLimit: Maximum pending live-preview chunks before the
@@ -160,7 +165,18 @@ public actor STTScheduler: STTManaging, SpeechEngineRoutedTranscribing, SpeechEn
         await runtime.isReady()
     }
 
-    public func clearModelCache() async {
+    public func clearModelCache() async throws {
+        // Fail closed while a meeting holds an engine lease: clearing the
+        // cache would unload the models the lease has pinned (June 2026
+        // audit follow-up; counterpart guard in beginSpeechEngineSession).
+        // The CLI's `models clear` runs in its own process and never holds
+        // leases, so this only refuses a same-process caller — exactly the
+        // case it must.
+        guard activeSpeechEngineSessionIDs.isEmpty else {
+            throw STTError.engineBusy
+        }
+        quiescing = true
+        defer { quiescing = false }
         await quiesce(restoreAcceptsNewJobs: false)
         defer { acceptsNewJobs = true }
         await observingRuntimeTimeout(reason: "clear_model_cache") {
@@ -169,6 +185,10 @@ public actor STTScheduler: STTManaging, SpeechEngineRoutedTranscribing, SpeechEn
     }
 
     public func shutdown() async {
+        // Terminal: refuse new leases from here on (quiescing is never
+        // reset). Shutdown itself must always proceed — unwinding an active
+        // meeting at quit is the app layer's job (meetingQuitTask).
+        quiescing = true
         await quiesce(restoreAcceptsNewJobs: false)
         await observingRuntimeTimeout(reason: "shutdown") {
             await runtime.shutdown()
@@ -255,14 +275,24 @@ public actor STTScheduler: STTManaging, SpeechEngineRoutedTranscribing, SpeechEn
         return .available
     }
 
-    public func beginSpeechEngineSession() async -> SpeechEngineLease {
+    public func beginSpeechEngineSession() async throws -> SpeechEngineLease {
+        // Refuse leases while the scheduler is quiescing for a model-cache
+        // clear or after shutdown: a lease granted during that window would
+        // pin engine state the runtime is unloading (June 2026 audit
+        // follow-up). An ordinary engine switch does NOT set `quiescing` —
+        // leases must still be admitted mid-switch and drain it below.
+        guard !quiescing else {
+            throw STTError.engineBusy
+        }
+
         // Reserve the session slot before the first suspension point. From
         // here on, the `activeSpeechEngineSessionIDs.isEmpty` guard in
-        // setSpeechEngine / setParakeetModelVariant fails, so no engine
-        // switch can start while this method is suspended below. Inserting
-        // the ID only after reading the selection left a TOCTOU window: a
-        // switch could interleave at either await and the lease would pin a
-        // different engine than the runtime ends up on (AUDIT-071).
+        // setSpeechEngine / setParakeetModelVariant / clearModelCache fails,
+        // so no engine switch or cache clear can start while this method is
+        // suspended below. Inserting the ID only after reading the selection
+        // left a TOCTOU window: a switch could interleave at either await and
+        // the lease would pin a different engine than the runtime ends up on
+        // (AUDIT-071).
         let sessionID = UUID()
         activeSpeechEngineSessionIDs.insert(sessionID)
 

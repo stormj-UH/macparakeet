@@ -383,7 +383,7 @@ public actor MeetingRecordingService: MeetingRecordingServiceProtocol {
         // the clock ticked over a minute boundary between them, which is
         // vanishingly rare but trivially avoidable.
         let now = Date()
-        let speechEngineLease = await speechEngineSessionManager?.beginSpeechEngineSession()
+        let speechEngineLease = try await speechEngineSessionManager?.beginSpeechEngineSession()
         currentSpeechEngineLease = speechEngineLease
         let speechEngine = speechEngineLease?.selection ?? SpeechEngineSelection(engine: .parakeet)
         let session = Session(

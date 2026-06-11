@@ -69,8 +69,8 @@ public actor STTClient: STTManaging, SpeechEngineRoutedTranscribing, SpeechEngin
         await scheduler.isReady()
     }
 
-    public func clearModelCache() async {
-        await scheduler.clearModelCache()
+    public func clearModelCache() async throws {
+        try await scheduler.clearModelCache()
     }
 
     public func shutdown() async {
@@ -99,8 +99,8 @@ public actor STTClient: STTManaging, SpeechEngineRoutedTranscribing, SpeechEngin
         await scheduler.engineSwitchAvailability()
     }
 
-    public func beginSpeechEngineSession() async -> SpeechEngineLease {
-        await scheduler.beginSpeechEngineSession()
+    public func beginSpeechEngineSession() async throws -> SpeechEngineLease {
+        try await scheduler.beginSpeechEngineSession()
     }
 
     public func endSpeechEngineSession(_ lease: SpeechEngineLease) async {

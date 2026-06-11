@@ -111,7 +111,7 @@ final class STTSchedulerTests: XCTestCase {
 
         try await scheduler.warmUp()
         _ = await scheduler.isReady()
-        await scheduler.clearModelCache()
+        try await scheduler.clearModelCache()
         await scheduler.shutdown()
 
         let counts = await runtime.lifecycleCounts()
@@ -126,7 +126,7 @@ final class STTSchedulerTests: XCTestCase {
         await runtime.blockNextClearModelCache()
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
-        let clearTask = Task { await scheduler.clearModelCache() }
+        let clearTask = Task { try await scheduler.clearModelCache() }
         try await waitForClearModelCacheCall(runtime: runtime, count: 1)
 
         do {
@@ -139,7 +139,7 @@ final class STTSchedulerTests: XCTestCase {
         }
 
         await runtime.releaseClearModelCache()
-        _ = await clearTask.value
+        _ = try await clearTask.value
 
         let result = try await scheduler.transcribe(audioPath: "after-clear", job: .dictation)
         XCTAssertEqual(result.text, "dictation:after-clear")
@@ -194,7 +194,7 @@ final class STTSchedulerTests: XCTestCase {
         let runtime = MockSTTRuntime()
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
-        let lease = await scheduler.beginSpeechEngineSession()
+        let lease = try await scheduler.beginSpeechEngineSession()
         do {
             try await scheduler.setSpeechEngine(.whisper)
             XCTFail("Expected engine switch to fail while a speech engine session is active")
@@ -220,7 +220,7 @@ final class STTSchedulerTests: XCTestCase {
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
         let leaseTask = Task {
-            await scheduler.beginSpeechEngineSession()
+            try await scheduler.beginSpeechEngineSession()
         }
         try await waitForHeldSelectionRead(runtime: runtime, count: 1)
 
@@ -232,7 +232,7 @@ final class STTSchedulerTests: XCTestCase {
         }
 
         await runtime.releaseSelectionRead()
-        let lease = await leaseTask.value
+        let lease = try await leaseTask.value
         XCTAssertEqual(lease.selection, SpeechEngineSelection(engine: .parakeet))
         let switches = await runtime.setSpeechEngineCallCount
         XCTAssertEqual(switches, 0, "No switch may reach the runtime mid-begin")
@@ -249,7 +249,7 @@ final class STTSchedulerTests: XCTestCase {
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
         let leaseTask = Task {
-            await scheduler.beginSpeechEngineSession()
+            try await scheduler.beginSpeechEngineSession()
         }
         try await waitForHeldSelectionRead(runtime: runtime, count: 1)
 
@@ -261,7 +261,7 @@ final class STTSchedulerTests: XCTestCase {
         }
 
         await runtime.releaseSelectionRead()
-        let lease = await leaseTask.value
+        let lease = try await leaseTask.value
         XCTAssertEqual(lease.selection, SpeechEngineSelection(engine: .parakeet))
         let swaps = await runtime.parakeetModelVariantSwitches
         XCTAssertTrue(swaps.isEmpty, "No variant swap may reach the runtime mid-begin")
@@ -270,6 +270,69 @@ final class STTSchedulerTests: XCTestCase {
         try await scheduler.setParakeetModelVariant(.v2, onProgress: nil)
         let swapsAfterEnd = await runtime.parakeetModelVariantSwitches
         XCTAssertEqual(swapsAfterEnd, [.v2], "Variant swap must succeed once the session is released")
+    }
+
+    /// June 2026 audit follow-up (noted in PR #476's review): a cache clear
+    /// must not run under an active meeting lease — it would unload exactly
+    /// the models the lease has pinned.
+    func testClearModelCacheFailsWhileSessionLeaseIsActive() async throws {
+        let runtime = MockSTTRuntime()
+        let scheduler = STTScheduler(runtimeProvider: runtime)
+
+        let lease = try await scheduler.beginSpeechEngineSession()
+        do {
+            try await scheduler.clearModelCache()
+            XCTFail("Expected cache clear to fail while a speech engine session is active")
+        } catch let error as STTError {
+            XCTAssertEqual(error.localizedDescription, STTError.engineBusy.localizedDescription)
+        }
+        let clearsWhileLeased = await runtime.lifecycleCounts().clearModelCache
+        XCTAssertEqual(clearsWhileLeased, 0, "No clear may reach the runtime under an active lease")
+
+        await scheduler.endSpeechEngineSession(lease)
+        try await scheduler.clearModelCache()
+        let clearsAfterEnd = await runtime.lifecycleCounts().clearModelCache
+        XCTAssertEqual(clearsAfterEnd, 1, "Cache clear must succeed once the session is released")
+    }
+
+    /// Counterpart window: `quiesce` suspends while draining jobs, so a
+    /// meeting could previously acquire a lease mid-clear and have its
+    /// models yanked when the clear resumed.
+    func testBeginSpeechEngineSessionFailsWhileClearModelCacheIsInFlight() async throws {
+        let runtime = MockSTTRuntime()
+        await runtime.blockNextClearModelCache()
+        let scheduler = STTScheduler(runtimeProvider: runtime)
+
+        let clearTask = Task { try await scheduler.clearModelCache() }
+        try await waitForClearModelCacheCall(runtime: runtime, count: 1)
+
+        do {
+            _ = try await scheduler.beginSpeechEngineSession()
+            XCTFail("Expected lease acquisition to fail while a cache clear is quiescing the scheduler")
+        } catch let error as STTError {
+            XCTAssertEqual(error.localizedDescription, STTError.engineBusy.localizedDescription)
+        }
+
+        await runtime.releaseClearModelCache()
+        _ = try await clearTask.value
+
+        // A transient clear admits leases again once it completes.
+        let lease = try await scheduler.beginSpeechEngineSession()
+        await scheduler.endSpeechEngineSession(lease)
+    }
+
+    func testBeginSpeechEngineSessionFailsAfterShutdown() async throws {
+        let runtime = MockSTTRuntime()
+        let scheduler = STTScheduler(runtimeProvider: runtime)
+
+        await scheduler.shutdown()
+
+        do {
+            _ = try await scheduler.beginSpeechEngineSession()
+            XCTFail("Expected lease acquisition to fail after shutdown")
+        } catch let error as STTError {
+            XCTAssertEqual(error.localizedDescription, STTError.engineBusy.localizedDescription)
+        }
     }
 
     func testSetParakeetModelVariantForwardsWhenIdle() async throws {
@@ -311,7 +374,7 @@ final class STTSchedulerTests: XCTestCase {
         let runtime = MockSTTRuntime()
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
-        let lease = await scheduler.beginSpeechEngineSession()
+        let lease = try await scheduler.beginSpeechEngineSession()
         do {
             try await scheduler.setParakeetModelVariant(.v2, onProgress: nil)
             XCTFail("Expected variant switch to fail while a speech engine session is active")
@@ -334,11 +397,11 @@ final class STTSchedulerTests: XCTestCase {
         XCTAssertEqual(availability, .available)
     }
 
-    func testEngineSwitchAvailabilityReportsMeetingActiveForSessionLease() async {
+    func testEngineSwitchAvailabilityReportsMeetingActiveForSessionLease() async throws {
         let runtime = MockSTTRuntime()
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
-        let lease = await scheduler.beginSpeechEngineSession()
+        let lease = try await scheduler.beginSpeechEngineSession()
 
         let availability = await scheduler.engineSwitchAvailability()
         XCTAssertEqual(availability, .meetingActive)
@@ -401,12 +464,12 @@ final class STTSchedulerTests: XCTestCase {
         try await waitForSpeechEngineSwitch(runtime: runtime, count: 1)
 
         let leaseTask = Task {
-            await scheduler.beginSpeechEngineSession()
+            try await scheduler.beginSpeechEngineSession()
         }
         try await Task.sleep(for: .milliseconds(50))
         await runtime.releaseSpeechEngineSwitch()
 
-        let lease = await leaseTask.value
+        let lease = try await leaseTask.value
         XCTAssertEqual(lease.selection, SpeechEngineSelection(engine: .whisper))
 
         await scheduler.endSpeechEngineSession(lease)
@@ -436,12 +499,12 @@ final class STTSchedulerTests: XCTestCase {
         XCTAssertEqual(count, 2)
     }
 
-    func testSpeechEngineSessionLeaseUsesRuntimeSelection() async {
+    func testSpeechEngineSessionLeaseUsesRuntimeSelection() async throws {
         let runtime = MockSTTRuntime()
         await runtime.setCurrentSelection(SpeechEngineSelection(engine: .whisper, language: "KO"))
         let scheduler = STTScheduler(runtimeProvider: runtime)
 
-        let lease = await scheduler.beginSpeechEngineSession()
+        let lease = try await scheduler.beginSpeechEngineSession()
 
         XCTAssertEqual(lease.selection, SpeechEngineSelection(engine: .whisper, language: "ko"))
     }
@@ -773,7 +836,7 @@ final class STTSchedulerTests: XCTestCase {
         // clearModelCache calls quiesce → cancelAndDrainRunningJobs. The runtime
         // ignores cancellation, so the drain blocks past the watchdog timeout
         // and we expect a `cancel_drain` telemetry event.
-        let clearTask = Task { await scheduler.clearModelCache() }
+        let clearTask = Task { try await scheduler.clearModelCache() }
 
         try await waitForUnhealthyEvent(
             spy: spy,
@@ -786,7 +849,7 @@ final class STTSchedulerTests: XCTestCase {
         await runtime.forceReleaseAll()
         await runtime.setIgnoreCancellation(false)
         _ = try? await wedgedTask.value
-        _ = await clearTask.value
+        _ = try await clearTask.value
     }
 
     func testWatchdogStaysSilentOnHappyPath() async throws {
@@ -805,7 +868,7 @@ final class STTSchedulerTests: XCTestCase {
         // Normal lifecycle: idle scheduler, no in-flight jobs. clearModelCache
         // and shutdown should both return well under the timeout, so the
         // watchdog must not fire.
-        await scheduler.clearModelCache()
+        try await scheduler.clearModelCache()
         await scheduler.shutdown()
 
         // Give any latent watchdog Task time to (incorrectly) fire — it

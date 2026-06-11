@@ -37,7 +37,9 @@ public protocol STTRuntimeManaging: Sendable {
     func observeWarmUpProgress() async -> (id: UUID, stream: AsyncStream<STTWarmUpState>)
     func removeWarmUpObserver(id: UUID) async
     func isReady() async -> Bool
-    func clearModelCache() async
+    /// Throws `STTError.engineBusy` when an active speech-engine session
+    /// lease would have its pinned models yanked by the clear.
+    func clearModelCache() async throws
     func shutdown() async
 }
 
@@ -83,7 +85,9 @@ extension SpeechEngineSwitching {
 }
 
 public protocol SpeechEngineSessionManaging: Sendable {
-    func beginSpeechEngineSession() async -> SpeechEngineLease
+    /// Throws `STTError.engineBusy` while the scheduler is quiescing for a
+    /// model-cache clear or after shutdown.
+    func beginSpeechEngineSession() async throws -> SpeechEngineLease
     func endSpeechEngineSession(_ lease: SpeechEngineLease) async
 }
 
