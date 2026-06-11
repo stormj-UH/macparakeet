@@ -90,8 +90,15 @@ extra="$(comm -13 <(printf '%s\n' "$swift_events") <(printf '%s\n' "$allowed_eve
 
 echo "Telemetry allowlist check: $swift_count Swift events vs $allowed_count allowlisted (source: $source_used)"
 if [[ -n "$extra" ]]; then
-    echo "Note: allowlist entries with no current Swift case (retained on purpose, see AUDIT-081):"
-    sed 's/^/  - /' <<<"$extra"
+    extra_count="$(wc -l <<<"$extra" | tr -d ' ')"
+    if [[ -n "${CI:-}" ]]; then
+        # CI logs are uploaded as public artifacts; don't enumerate
+        # private-repo-only allowlist entries there.
+        echo "Note: $extra_count allowlist entries have no current Swift case (retained on purpose, see AUDIT-081); run this script locally for the list."
+    else
+        echo "Note: allowlist entries with no current Swift case (retained on purpose, see AUDIT-081):"
+        sed 's/^/  - /' <<<"$extra"
+    fi
 fi
 
 if [[ -n "$missing" ]]; then
