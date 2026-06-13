@@ -382,6 +382,23 @@ struct ClearMeetingAudioSubcommand: ParsableCommand {
         let fm = FileManager.default
         let dir = try resolvedMeetingRecordingsDirectory()
 
+        // A live meeting session (in a running app — likely this user's GUI)
+        // writes into meeting-recordings/{sessionID}/. Wiping that out from
+        // under the active writer loses the in-progress recording. The GUI
+        // refuses while its pill is active; the CLI can't see the pill, so it
+        // checks the same disk signal the recovery path trusts: a lock file
+        // whose owning process is still alive. Crashed/stale sessions (dead
+        // pid) stay clearable, matching the GUI's clear-all behavior.
+        let lockStore = MeetingRecordingLockFileStore()
+        let activeSessions = try lockStore.discoverActiveSessions(
+            meetingsRoot: URL(fileURLWithPath: dir, isDirectory: true)
+        )
+        guard activeSessions.isEmpty else {
+            throw ValidationError(
+                "A meeting recording is currently in progress. Stop it before clearing meeting audio."
+            )
+        }
+
         if fm.fileExists(atPath: dir) {
             try fm.removeItem(atPath: dir)
         }
