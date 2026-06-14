@@ -58,7 +58,16 @@ public final class OnboardingViewModel {
     public private(set) var engineState: EngineState = .idle
     public private(set) var whisperRecommendation: WhisperOnboardingRecommendation?
 
+    /// True while a *permission request* is in flight. The Microphone /
+    /// Accessibility grant buttons disable on this.
     public var isBusy: Bool = false
+
+    /// True while a speech-model warm-up is in flight. Kept separate from
+    /// `isBusy` so the Part B head-start download — which can start at
+    /// onboarding open — never disables the permission grant buttons. The engine
+    /// step shows its own progress from `engineState`, not this flag.
+    /// See plans/active/2026-05-dictation-first-onboarding.md §5.1.
+    public private(set) var engineBusy: Bool = false
 
     private let permissionService: PermissionServiceProtocol
     private let sttClient: STTClientProtocol
@@ -87,7 +96,11 @@ public final class OnboardingViewModel {
     /// download even when bytes-per-second is low, so silence longer than
     /// this strongly suggests a stuck connection or a hung dependency.
     /// Memory: v0.4.22 stranded ~23 users for ~24h with no escape hatch.
-    public static let warmUpStallTimeout: Duration = .seconds(180)
+    /// `nonisolated` so it can be referenced from the `init` parameter default
+    /// (a nonisolated context) without the Swift-5-mode concurrency warning — a
+    /// `Sendable` `Duration` constant is safe to read from anywhere (and the
+    /// Swift 6 language mode already treats it this way via SE-0434).
+    public nonisolated static let warmUpStallTimeout: Duration = .seconds(180)
     private let requiredFirstSetupDiskBytes: Int64 = 7 * 1_024 * 1_024 * 1_024
     private let requiredDiarizationSetupDiskBytes: Int64 = 512 * 1_024 * 1_024
     private let requiredWhisperSetupDiskBytes: Int64 = 2 * 1_024 * 1_024 * 1_024
@@ -267,6 +280,19 @@ public final class OnboardingViewModel {
         permissionPollingTask = nil
     }
 
+    /// Apply a warm-up failure to `engineState`, surfacing the terminal
+    /// `.failed` **only** once the user is on the Speech Model step. Part B kicks
+    /// the warm-up off at onboarding open, so a failure can land while the user
+    /// is still granting permissions — showing a failed card on those steps (or
+    /// flashing one the instant the engine step appears) would be wrong. Before
+    /// the engine step we reset to `.idle`; the engine step's `.onAppear` then
+    /// retries `startEngineWarmUp()` cleanly. Always clears `engineBusy`.
+    /// See plans/active/2026-05-dictation-first-onboarding.md §5.3.
+    private func applyEngineWarmUpFailure(_ message: String) {
+        engineBusy = false
+        engineState = (step == .engine) ? .failed(message: message) : .idle
+    }
+
     public func startEngineWarmUp() {
         // If already observing or completed, don't restart
         if case .ready = engineState { return }
@@ -280,7 +306,7 @@ public final class OnboardingViewModel {
         engineGeneration += 1
         let generation = engineGeneration
         let observationToken = UUID()
-        isBusy = true
+        engineBusy = true
         engineState = .working(message: "Checking setup requirements...", progress: nil)
         warmUpObservationToken = observationToken
         resetWarmUpStallWatchdog(generation: generation, observationToken: observationToken)
@@ -307,12 +333,17 @@ public final class OnboardingViewModel {
                 guard self.engineGeneration == generation, self.warmUpObservationToken == observationToken else { return }
             } catch {
                 guard self.engineGeneration == generation, self.warmUpObservationToken == observationToken else { return }
-                self.engineState = .failed(message: error.localizedDescription)
-                self.isBusy = false
+                self.applyEngineWarmUpFailure(error.localizedDescription)
                 clearObservationIfCurrent(nil)
                 return
             }
 
+            // Part B head-start: with the early trigger this fires at onboarding
+            // open rather than on the Speech Model step. The duration metric
+            // (warmUpStartedAt → .ready) still measures real download+load time —
+            // the background download runs independent of which step the user is
+            // on, so the user's think-time overlaps it rather than inflating it.
+            // See §5.4.
             let warmUpStartedAt = Date()
             Telemetry.send(.modelDownloadStarted(
                 modelKind: .localSpeechStack,
@@ -355,13 +386,12 @@ public final class OnboardingViewModel {
                         break observationLoop
                     } catch {
                         guard self.engineGeneration == generation, self.warmUpObservationToken == observationToken else { break observationLoop }
-                        self.engineState = .failed(message: error.localizedDescription)
-                        self.isBusy = false
+                        self.applyEngineWarmUpFailure(error.localizedDescription)
                         break observationLoop
                     }
                     guard self.engineGeneration == generation, self.warmUpObservationToken == observationToken else { break observationLoop }
                     self.engineState = .ready
-                    self.isBusy = false
+                    self.engineBusy = false
                     break observationLoop
                 case .failed(let message):
                     Telemetry.send(.modelDownloadFailed(
@@ -370,8 +400,7 @@ public final class OnboardingViewModel {
                         modelKind: .localSpeechStack,
                         speechEngine: .parakeet
                     ))
-                    self.engineState = .failed(message: message)
-                    self.isBusy = false
+                    self.applyEngineWarmUpFailure(message)
                     break observationLoop
                 }
             }
@@ -382,7 +411,7 @@ public final class OnboardingViewModel {
     private func startRecommendedWhisperSetup(recommendation: WhisperOnboardingRecommendation) {
         engineGeneration += 1
         let generation = engineGeneration
-        isBusy = true
+        engineBusy = true
         engineState = .working(message: "Checking Whisper setup requirements...", progress: nil)
 
         let outerTask = Task { @MainActor [weak self] in
@@ -419,15 +448,14 @@ public final class OnboardingViewModel {
                 guard self.engineGeneration == generation else { return }
 
                 self.engineState = .ready
-                self.isBusy = false
+                self.engineBusy = false
             } catch is CancellationError {
                 guard self.engineGeneration == generation else { return }
                 self.engineState = .idle
-                self.isBusy = false
+                self.engineBusy = false
             } catch {
                 guard self.engineGeneration == generation else { return }
-                self.engineState = .failed(message: error.localizedDescription)
-                self.isBusy = false
+                self.applyEngineWarmUpFailure(error.localizedDescription)
             }
         }
         warmUpObserverTask = outerTask
@@ -649,10 +677,9 @@ public final class OnboardingViewModel {
                 modelKind: .localSpeechStack,
                 speechEngine: .parakeet
             ))
-            self.engineState = .failed(
-                message: "Setup is taking longer than expected. Check your network connection and tap Retry."
+            self.applyEngineWarmUpFailure(
+                "Setup is taking longer than expected. Check your network connection and tap Retry."
             )
-            self.isBusy = false
             self.cancelWarmUpObservation()
         }
     }
