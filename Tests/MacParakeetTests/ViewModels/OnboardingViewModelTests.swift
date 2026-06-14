@@ -482,7 +482,32 @@ final class OnboardingViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isBusy, "the head-start download must not hold the permission isBusy flag")
     }
 
-    /// Guard 2 / idempotency (§5.1): the early head-start call plus the engine
+    /// Guard 1 (§5.1) regression (Gemini review): cancelling the warm-up
+    /// observation — e.g. the onboarding window closing mid-download via
+    /// `stopObservingWarmUp()` — must clear `engineBusy`. The cancelled task's
+    /// `clearObservationIfCurrent` defer bails on the nilled observation token
+    /// and so never reaches a busy-clearing terminal state; without the explicit
+    /// reset in `cancelWarmUpObservation()` the flag leaks `true` forever,
+    /// breaking its "true while a warm-up is in flight" contract.
+    func testCancellingWarmUpObservationClearsEngineBusy() async throws {
+        let perms = MockPermissionService()
+        let stt = MockSTTClient()
+        await stt.configureWarmUpHangIndefinitely()
+        let suite = "com.macparakeet.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        let vm = makeViewModel(permissionService: perms, sttClient: stt, defaults: defaults)
+        vm.startEngineWarmUp()
+        try await Task.sleep(for: .milliseconds(100)) // let the warm-up reach in-flight
+        XCTAssertTrue(vm.engineBusy, "warm-up in flight should set engineBusy")
+
+        // Window close mid-download tears observation down without a terminal state.
+        vm.stopObservingWarmUp()
+        XCTAssertFalse(vm.engineBusy, "cancelling observation must clear engineBusy (no leak)")
+    }
+
+    /// Guard 1 / idempotency (§5.1): the early head-start call plus the engine
     /// step's `.onAppear` fallback call must result in exactly one download.
     func testEngineStepRetriggerAfterHeadStartDoesNotDoubleDownload() async throws {
         let perms = MockPermissionService()

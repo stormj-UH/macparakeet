@@ -653,6 +653,16 @@ public final class OnboardingViewModel {
 
     private func cancelWarmUpObservation() {
         warmUpObservationToken = nil
+        // Clear `engineBusy` here so it never outlives the observation. The
+        // cancelled `warmUpObserverTask`'s `defer { clearObservationIfCurrent }`
+        // bails on the now-nil `warmUpObservationToken`, so it never reaches a
+        // busy-clearing terminal state — without this line a window close mid
+        // warm-up (`stopObservingWarmUp()`) would leak `engineBusy == true`,
+        // violating the flag's "true while a warm-up is in flight" contract.
+        // Safe for the other callers too: `retryEngineWarmUp()` re-sets it in the
+        // immediately-following `startEngineWarmUp()`, and the stall watchdog
+        // already cleared it via `applyEngineWarmUpFailure`.
+        engineBusy = false
         warmUpStallWatchdogTask?.cancel()
         warmUpStallWatchdogTask = nil
         warmUpObserverTask?.cancel()
