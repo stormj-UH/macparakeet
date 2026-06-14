@@ -141,6 +141,9 @@ All ADRs are in `spec/adr/`. These are locked decisions -- don't second-guess th
 | ADR-020 | Live meeting notepad + memo-steered summaries (implemented) | `spec/adr/020-live-meeting-notepad-and-memo-summaries.md` |
 | ADR-021 | WhisperKit as optional multilingual STT engine (implemented) | `spec/adr/021-whisperkit-multilingual-stt.md` |
 | ADR-022 | Transforms — system-wide LLM rewrites on selected text (Phase 2 productized; enabled, shipping since v0.6.7) | `spec/adr/022-transforms-system-wide-rewrite.md` |
+| ADR-023 | Activity-based meeting auto-stop (silence + app-quit signals + veto countdown; proposed, replaces the withdrawn ADR-017 calendar auto-stop) | `spec/adr/023-activity-based-meeting-auto-stop.md` |
+| ADR-024 | Activity-based meeting detection (per-process audio attribution + camera + app signal fusion; proposed) | `spec/adr/024-activity-based-meeting-detection.md` |
+| ADR-025 | Meeting capture reliability — mic-health watchdog + post-stop coverage repair (proposed) | `spec/adr/025-meeting-capture-reliability.md` |
 
 > Historical/dormant ADRs (still in `spec/adr/`, kept for context): ADR-003 (one-time purchase pricing), ADR-006 (trial + license activation), ADR-008 (local LLM runtime). Current public builds are free/GPL-3.0 and unlocked. The old LemonSqueezy/trial entitlement plumbing is intentionally retained as future-option code for GPL-compatible official paid distribution/support; do not remove it as dead code without explicit owner direction and an ADR/spec update.
 
