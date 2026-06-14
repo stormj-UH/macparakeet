@@ -29,6 +29,10 @@ public final class AudioProcessActivityCollector: @unchecked Sendable {
         self.selfBundleID = selfBundleID
     }
 
+    deinit {
+        stop()
+    }
+
     public func start(handler: @escaping SnapshotHandler) {
         let processObjectIDs = Self.processObjectIDs()
         lock.withLock {

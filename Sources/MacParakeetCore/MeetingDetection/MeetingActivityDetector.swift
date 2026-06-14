@@ -25,25 +25,41 @@ public enum MeetingActivityDetector {
         case signalCleared
     }
 
+    public struct Candidate: Sendable, Equatable {
+        public let identity: MeetingIdentity
+        public let since: Date
+
+        public init(identity: MeetingIdentity, since: Date) {
+            self.identity = identity
+            self.since = since
+        }
+    }
+
     public static func evaluate(
         signal: ActivitySignalSnapshot,
         now: Date,
         config: Config,
         activeRecording: Bool,
-        candidateSince: Date?,
+        candidate: Candidate?,
         suppressedIdentities: [MeetingIdentity: Date]
     ) -> [DetectionEvent] {
-        guard config.mode != .off, !activeRecording else { return [] }
+        guard !activeRecording, config.mode != .off else {
+            return candidate == nil ? [] : [.signalCleared]
+        }
 
         guard let identity = candidateIdentity(for: signal) else {
-            return candidateSince == nil ? [] : [.signalCleared]
+            return candidate == nil ? [] : [.signalCleared]
+        }
+
+        if let candidate, candidate.identity != identity {
+            return [.signalCleared]
         }
 
         if let suppressedUntil = suppressedIdentities[identity], suppressedUntil > now {
-            return []
+            return candidate == nil ? [] : [.signalCleared]
         }
 
-        let stableSince = candidateSince ?? now
+        let stableSince = candidate?.since ?? now
         guard now.timeIntervalSince(stableSince) >= config.candidateDwellSeconds else {
             return []
         }
@@ -85,8 +101,8 @@ public enum MeetingActivityDetector {
             }
             return descriptor.app
         }
-        if let first = dedicated.first {
-            return first
+        if let app = preferredApp(from: dedicated) {
+            return app
         }
 
         let chat = inputHolders.compactMap { process -> MeetingApp? in
@@ -99,8 +115,8 @@ public enum MeetingActivityDetector {
             }
             return descriptor.app
         }
-        if let first = chat.first {
-            return first
+        if let app = preferredApp(from: chat) {
+            return app
         }
 
         let browser = inputHolders.compactMap { process -> MeetingApp? in
@@ -111,8 +127,15 @@ public enum MeetingActivityDetector {
                 return nil
             }
             let isFrontmost = signal.frontmostBundleID == bundleID
-            return (isFrontmost || signal.hasRecognizedMeetingURL) ? descriptor.app : nil
+            let urlMatchesAudioBrowser = signal.recognizedMeetingURLBundleIDs.contains(bundleID)
+            return (isFrontmost || urlMatchesAudioBrowser) ? descriptor.app : nil
         }
         return browser.first
+    }
+
+    private static func preferredApp(from apps: [MeetingApp]) -> MeetingApp? {
+        MeetingApp.allCases.first { preferred in
+            apps.contains(preferred)
+        }
     }
 }

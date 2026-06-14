@@ -39,18 +39,18 @@ public struct ActivitySignalSnapshot: Sendable, Equatable {
     public let audio: ProcessAudioSnapshot
     public let cameraRunning: Bool
     public let frontmostBundleID: String?
-    public let hasRecognizedMeetingURL: Bool
+    public let recognizedMeetingURLBundleIDs: Set<String>
 
     public init(
         audio: ProcessAudioSnapshot,
         cameraRunning: Bool = false,
         frontmostBundleID: String? = nil,
-        hasRecognizedMeetingURL: Bool = false
+        recognizedMeetingURLBundleIDs: Set<String> = []
     ) {
         self.audio = audio
         self.cameraRunning = cameraRunning
         self.frontmostBundleID = frontmostBundleID
-        self.hasRecognizedMeetingURL = hasRecognizedMeetingURL
+        self.recognizedMeetingURLBundleIDs = recognizedMeetingURLBundleIDs
     }
 }
 
