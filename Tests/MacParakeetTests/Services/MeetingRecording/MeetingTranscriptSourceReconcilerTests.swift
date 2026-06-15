@@ -211,6 +211,45 @@ final class MeetingTranscriptSourceReconcilerTests: XCTestCase {
         )
     }
 
+    func testFinalizeKeepsLeadingUnmatchedSystemWordsAndLabelsLaterDiarizedWords() {
+        let finalized = MeetingTranscriptFinalizer.finalize(
+            sourceTranscripts: [
+                .init(
+                    source: .system,
+                    result: STTResult(
+                        text: "okay shipping today",
+                        words: [
+                            TimestampedWord(word: "okay", startMs: 0, endMs: 90, confidence: 0.95),
+                            TimestampedWord(word: "shipping", startMs: 400, endMs: 520, confidence: 0.95),
+                            TimestampedWord(word: "today", startMs: 540, endMs: 650, confidence: 0.95),
+                        ]
+                    ),
+                    startOffsetMs: 0
+                ),
+            ],
+            systemDiarization: .init(
+                speakers: [SpeakerInfo(id: SpeakerID.systemSpeaker("S1"), label: "Others 1")],
+                segments: [
+                    SpeakerSegment(
+                        speakerId: SpeakerID.systemSpeaker("S1"),
+                        startMs: 380,
+                        endMs: 700
+                    ),
+                ]
+            )
+        )
+
+        XCTAssertEqual(
+            finalized.words.map(\.speakerId),
+            [AudioSource.system.rawValue, SpeakerID.systemSpeaker("S1"), SpeakerID.systemSpeaker("S1")]
+        )
+        XCTAssertEqual(
+            finalized.diarizationSegments.map(\.speakerId),
+            [AudioSource.system.rawValue, SpeakerID.systemSpeaker("S1")]
+        )
+        XCTAssertEqual(finalized.speakers.map(\.id), [AudioSource.system.rawValue, SpeakerID.systemSpeaker("S1")])
+    }
+
     /// Loud speaker playback transcribes confidently, so echo of a long
     /// remote utterance sails past the confidence-gated duplicate rule. A
     /// ≥5-word run matching the remote speaker's simultaneous words (with

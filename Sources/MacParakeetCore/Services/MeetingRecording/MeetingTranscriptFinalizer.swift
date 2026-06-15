@@ -50,10 +50,11 @@ struct MeetingTranscriptFinalizer {
         let microphoneWords = sourceReconciliation.microphoneWords
         let finalizedSystemWords: [WordTimestamp]
         if let systemDiarization {
-            finalizedSystemWords = SpeakerMerger.mergeWordTimestampsWithSpeakers(
+            finalizedSystemWords = SpeakerWordAssigner().assign(
                 words: systemWords,
-                segments: systemDiarization.segments
-            )
+                segments: systemDiarization.segments,
+                sourceOnlySpeakerId: AudioSource.system.rawValue
+            ).words
         } else {
             finalizedSystemWords = systemWords
         }
@@ -125,16 +126,17 @@ struct MeetingTranscriptFinalizer {
     }
 
     private static func buildDiarizationSegments(from words: [WordTimestamp]) -> [DiarizationSegmentRecord] {
-        guard let firstWord = words.first, let firstSpeaker = firstWord.speakerId else {
+        guard let firstIndex = words.firstIndex(where: { $0.speakerId != nil }),
+              let firstSpeaker = words[firstIndex].speakerId else {
             return []
         }
 
         var segments: [DiarizationSegmentRecord] = []
         var currentSpeaker = firstSpeaker
-        var currentStart = firstWord.startMs
-        var currentEnd = firstWord.endMs
+        var currentStart = words[firstIndex].startMs
+        var currentEnd = words[firstIndex].endMs
 
-        for word in words.dropFirst() {
+        for word in words.dropFirst(firstIndex + 1) {
             guard let speakerId = word.speakerId else { continue }
 
             if speakerId == currentSpeaker, word.startMs - currentEnd <= 1500 {

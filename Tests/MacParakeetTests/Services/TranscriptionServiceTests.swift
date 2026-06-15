@@ -1664,7 +1664,7 @@ final class TranscriptionServiceTests: XCTestCase {
                 text: "Hello there",
                 words: [
                     TimestampedWord(word: "Hello", startMs: 0, endMs: 180, confidence: 0.9),
-                    TimestampedWord(word: "there", startMs: 200, endMs: 360, confidence: 0.9),
+                    TimestampedWord(word: "there", startMs: 500, endMs: 660, confidence: 0.9),
                 ]
             ),
         ])

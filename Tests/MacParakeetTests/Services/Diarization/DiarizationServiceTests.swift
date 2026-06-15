@@ -195,6 +195,7 @@ final class DiarizationServiceTests: XCTestCase {
         XCTAssertEqual(result.speakerCount, 1)
         XCTAssertEqual(result.speakers.map { $0.id }, ["S1"])
         XCTAssertEqual(result.segments.map { $0.speakerId }, ["S1"])
+        XCTAssertEqual(try XCTUnwrap(result.segments.first).qualityScore, 0.9, accuracy: 0.0001)
         XCTAssertTrue(ready)
     }
 

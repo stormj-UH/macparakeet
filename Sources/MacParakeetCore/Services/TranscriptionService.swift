@@ -1217,7 +1217,8 @@ public actor TranscriptionService: SpeechEngineOverrideTranscriptionService {
                 SpeakerSegment(
                     speakerId: speakerIDMap[segment.speakerId] ?? SpeakerID.systemSpeaker(segment.speakerId),
                     startMs: segment.startMs + systemTrack.startOffsetMs,
-                    endMs: segment.endMs + systemTrack.startOffsetMs
+                    endMs: segment.endMs + systemTrack.startOffsetMs,
+                    qualityScore: segment.qualityScore
                 )
             }
 
@@ -1360,11 +1361,11 @@ public actor TranscriptionService: SpeechEngineOverrideTranscriptionService {
                     )
                     let diarDuration = Date().timeIntervalSince(diarStartedAt)
                     if !diarResult.segments.isEmpty {
-                        let mergedWords = SpeakerMerger.mergeWordTimestampsWithSpeakers(
+                        let assignedWords = SpeakerWordAssigner().assign(
                             words: words,
                             segments: diarResult.segments
-                        )
-                        transcription.wordTimestamps = mergedWords
+                        ).words
+                        transcription.wordTimestamps = assignedWords
                         transcription.speakerCount = diarResult.speakerCount
                         transcription.speakers = diarResult.speakers
                         transcription.diarizationSegments = diarResult.segments.map {
