@@ -171,9 +171,14 @@ public actor DiarizationService: DiarizationServiceProtocol {
 
         let speakers: [SpeakerInfo] = idMapping
             .sorted { Int($0.value.dropFirst()) ?? 0 < Int($1.value.dropFirst()) ?? 0 }
-            .map { _, stableId in
+            .map { rawProviderSpeakerId, stableId in
                 let number = String(stableId.dropFirst())
-                return SpeakerInfo(id: stableId, label: "Speaker \(number)")
+                return SpeakerInfo(
+                    id: stableId,
+                    label: "Speaker \(number)",
+                    rawProviderSpeakerId: rawProviderSpeakerId,
+                    labelSource: .modelDefault
+                )
             }
 
         return MacParakeetDiarizationResult(

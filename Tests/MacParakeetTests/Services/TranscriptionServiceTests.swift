@@ -1576,8 +1576,20 @@ final class TranscriptionServiceTests: XCTestCase {
         XCTAssertEqual(result.speakerCount, 3)
         XCTAssertEqual(result.speakers, [
             SpeakerInfo(id: "microphone", label: "Me"),
-            SpeakerInfo(id: "system:S1", label: "Others 1"),
-            SpeakerInfo(id: "system:S2", label: "Others 2"),
+            SpeakerInfo(
+                id: "system:S1",
+                label: "Others 1",
+                source: .system,
+                rawProviderSpeakerId: "S1",
+                labelSource: .modelDefault
+            ),
+            SpeakerInfo(
+                id: "system:S2",
+                label: "Others 2",
+                source: .system,
+                rawProviderSpeakerId: "S2",
+                labelSource: .modelDefault
+            ),
         ])
         XCTAssertEqual(result.wordTimestamps?.map(\.speakerId), ["microphone", "system:S1", "system:S2"])
         XCTAssertEqual(result.diarizationSegments, [
@@ -1770,7 +1782,13 @@ final class TranscriptionServiceTests: XCTestCase {
         XCTAssertEqual(result.wordTimestamps?.map(\.speakerId), ["system:S1", "system"])
         XCTAssertEqual(result.speakers, [
             SpeakerInfo(id: "system", label: "Others"),
-            SpeakerInfo(id: "system:S1", label: "Others 1"),
+            SpeakerInfo(
+                id: "system:S1",
+                label: "Others 1",
+                source: .system,
+                rawProviderSpeakerId: "S1",
+                labelSource: .modelDefault
+            ),
         ])
     }
 

@@ -91,6 +91,38 @@ struct MeetingTranscriptFinalizer {
         )
     }
 
+    static func systemDiarization(
+        from result: MacParakeetDiarizationResult,
+        startOffsetMs: Int = 0
+    ) -> SystemDiarization {
+        let mappedSpeakers = result.speakers.enumerated().map { index, speaker in
+            SpeakerInfo(
+                id: SpeakerID.systemSpeaker(speaker.id),
+                label: "\(AudioSource.system.displayLabel) \(index + 1)",
+                source: .system,
+                rawProviderSpeakerId: speaker.rawProviderSpeakerId ?? speaker.id,
+                labelSource: .modelDefault
+            )
+        }
+        let speakerIDMap = Dictionary(uniqueKeysWithValues: zip(
+            result.speakers.map(\.id),
+            mappedSpeakers.map(\.id)
+        ))
+        let mappedSegments = result.segments.map { segment in
+            SpeakerSegment(
+                speakerId: speakerIDMap[segment.speakerId] ?? SpeakerID.systemSpeaker(segment.speakerId),
+                startMs: segment.startMs + startOffsetMs,
+                endMs: segment.endMs + startOffsetMs,
+                qualityScore: segment.qualityScore
+            )
+        }
+
+        return SystemDiarization(
+            speakers: mappedSpeakers,
+            segments: mappedSegments
+        )
+    }
+
     private static func shiftedWords(
         for result: STTResult,
         source: AudioSource,

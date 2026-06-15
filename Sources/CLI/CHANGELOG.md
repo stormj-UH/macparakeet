@@ -98,6 +98,10 @@ by checking exit code first: `2` = misuse, `1` = runtime, `0` = success.
   fixture subdirectory, optionally compares `reference.rttm` annotations with
   DER/coverage metrics, and supports `--json` output. Private fixtures should
   live under ignored `fixtures/private/`.
+- Speaker objects in JSON output may now include optional `source`,
+  `rawProviderSpeakerId`, and `labelSource` fields so agents can distinguish
+  model-default labels from user-renamed speakers and trace meeting system
+  speakers back to the upstream diarizer ID.
 
 ## [2.9.0] -- 2026-06-11
 

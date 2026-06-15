@@ -1296,28 +1296,9 @@ public actor TranscriptionService: SpeechEngineOverrideTranscriptionService {
 
             guard !diarResult.segments.isEmpty else { return nil }
 
-            let mappedSpeakers = diarResult.speakers.enumerated().map { index, speaker in
-                SpeakerInfo(
-                    id: SpeakerID.systemSpeaker(speaker.id),
-                    label: "\(AudioSource.system.displayLabel) \(index + 1)"
-                )
-            }
-            let speakerIDMap = Dictionary(uniqueKeysWithValues: zip(
-                diarResult.speakers.map(\.id),
-                mappedSpeakers.map(\.id)
-            ))
-            let mappedSegments = diarResult.segments.map { segment in
-                SpeakerSegment(
-                    speakerId: speakerIDMap[segment.speakerId] ?? SpeakerID.systemSpeaker(segment.speakerId),
-                    startMs: segment.startMs + systemTrack.startOffsetMs,
-                    endMs: segment.endMs + systemTrack.startOffsetMs,
-                    qualityScore: segment.qualityScore
-                )
-            }
-
-            return MeetingTranscriptFinalizer.SystemDiarization(
-                speakers: mappedSpeakers,
-                segments: mappedSegments
+            return MeetingTranscriptFinalizer.systemDiarization(
+                from: diarResult,
+                startOffsetMs: systemTrack.startOffsetMs
             )
         } catch is CancellationError {
             throw CancellationError()
