@@ -1566,13 +1566,19 @@ final class TranscriptionServiceTests: XCTestCase {
                 meetingOriginHostTime: nil,
                 microphone: .init(firstHostTime: nil, lastHostTime: nil, startOffsetMs: 0, writtenFrameCount: 24_000, sampleRate: 48_000),
                 system: .init(firstHostTime: nil, lastHostTime: nil, startOffsetMs: 900, writtenFrameCount: 24_000, sampleRate: 48_000)
-            )
+            ),
+            calendarContext: MeetingRecordingCalendarContext(attendeeCount: 2)
         )
 
         let result = try await service.transcribeMeeting(recording: recording)
         let diarizeCalled = await diarization.diarizeCalled
+        let diarizeOptions = await diarization.diarizeOptions
 
         XCTAssertTrue(diarizeCalled)
+        XCTAssertEqual(
+            diarizeOptions,
+            [DiarizationOptions(speakerCountHint: SpeakerCountHint(maximum: 2))]
+        )
         XCTAssertEqual(result.speakerCount, 3)
         XCTAssertEqual(result.speakers, [
             SpeakerInfo(id: "microphone", label: "Me"),
@@ -1778,8 +1784,10 @@ final class TranscriptionServiceTests: XCTestCase {
         )
 
         let result = try await service.transcribeMeeting(recording: recording)
+        let diarizeOptions = await diarization.diarizeOptions
 
         XCTAssertEqual(result.wordTimestamps?.map(\.speakerId), ["system:S1", "system"])
+        XCTAssertEqual(diarizeOptions, [.default])
         XCTAssertEqual(result.speakers, [
             SpeakerInfo(id: "system", label: "Others"),
             SpeakerInfo(
