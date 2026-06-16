@@ -22,12 +22,18 @@ final class EngineSettingsViewModelTests: XCTestCase {
 
     private func makeViewModel(
         parakeetCached: @escaping @Sendable (ParakeetModelVariant) -> Bool = { _ in false },
-        nemotronCached: @escaping @Sendable (NemotronModelVariant, String?) -> Bool = { _, _ in false }
+        nemotronCached: @escaping @Sendable (NemotronModelVariant, String?) -> Bool = { _, _ in false },
+        deleteParakeet: @escaping @Sendable (ParakeetModelVariant) -> Bool = { _ in false },
+        deleteNemotron: @escaping @Sendable (NemotronModelVariant, String?) -> Bool = { _, _ in false },
+        deleteWhisper: @escaping @Sendable (String) -> Bool = { _ in false }
     ) -> EngineSettingsViewModel {
         EngineSettingsViewModel(
             defaults: defaults,
             parakeetModelVariantCached: parakeetCached,
-            nemotronModelVariantCached: nemotronCached
+            nemotronModelVariantCached: nemotronCached,
+            deleteParakeetModelOnDisk: deleteParakeet,
+            deleteNemotronModelOnDisk: deleteNemotron,
+            deleteWhisperModelOnDisk: deleteWhisper
         )
     }
 
