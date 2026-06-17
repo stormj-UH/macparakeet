@@ -45,6 +45,12 @@ public final class EngineSettingsViewModel {
             Telemetry.send(.settingChanged(setting: .whisperDefaultLanguage))
         }
     }
+    // The mutable state below is intentionally writable, not `private(set)`:
+    // the Settings/Engine test suites inject it directly to stage preconditions
+    // the async model-status refresh can't reproduce deterministically (e.g.
+    // `whisperModelStatus`, `downloadedParakeetVariants`), and `SettingsView`
+    // writes `speechEngineError`. Locking these down to "encapsulate" them
+    // breaks the regression net — don't.
     public var speechEngineSwitching = false
     public var speechEngineSwitchTarget: SpeechEnginePreference?
     public var speechEngineSwitchDetail: String?
