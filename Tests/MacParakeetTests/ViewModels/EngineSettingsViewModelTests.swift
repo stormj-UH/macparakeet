@@ -216,6 +216,32 @@ final class EngineSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.parakeetStatusDetail, "Unavailable in this runtime.")
     }
 
+    func testDownloadedParakeetVariantsReflectsFalseCachedStub() async throws {
+        let vm = makeViewModel(parakeetCached: { _ in false })
+
+        vm.refreshModelStatus()
+
+        try await waitForModelStatusRefreshToFinish(vm)
+        XCTAssertTrue(vm.downloadedParakeetVariants.isEmpty)
+        XCTAssertEqual(vm.parakeetStatus, .unknown)
+        XCTAssertEqual(vm.parakeetStatusDetail, "Unavailable in this runtime.")
+    }
+
+    func testDownloadedNemotronVariantsReflectsTrueCachedStubAndMarksSelectedVariantAvailable() async throws {
+        let vm = makeViewModel(nemotronCached: { _, _ in true })
+
+        vm.refreshModelStatus()
+
+        try await waitUntil { vm.downloadedNemotronVariants == Set(NemotronModelVariant.allCases) }
+        XCTAssertEqual(vm.downloadedNemotronVariants, Set(NemotronModelVariant.allCases))
+        XCTAssertTrue(vm.isNemotronModelAvailable)
+        XCTAssertEqual(vm.nemotronModelStatus, .notLoaded)
+        XCTAssertEqual(
+            vm.nemotronModelStatusDetail,
+            "Nemotron 3.5 ASR Streaming 0.6B · Installed locally, loads when selected."
+        )
+    }
+
     func testDownloadedNemotronVariantsReflectsFalseCachedStubAndMarksSelectedVariantUnavailable() async throws {
         let vm = makeViewModel(nemotronCached: { _, _ in false })
 

@@ -425,10 +425,8 @@ public final class EngineSettingsViewModel {
                     durationSeconds: durationSeconds,
                     errorType: nil
                 ))
-                await MainActor.run {
-                    self.nemotronDownloading = false
-                    self.refreshNemotronModelStatus()
-                }
+                self.nemotronDownloading = false
+                self.refreshNemotronModelStatus()
             } catch is CancellationError {
                 let durationSeconds = Observability.durationSeconds(since: operationContext.startedAt)
                 Telemetry.send(.modelOperation(
@@ -443,10 +441,8 @@ public final class EngineSettingsViewModel {
                     durationSeconds: durationSeconds,
                     errorType: "CancellationError"
                 ))
-                await MainActor.run {
-                    self.nemotronDownloading = false
-                    self.refreshNemotronModelStatus()
-                }
+                self.nemotronDownloading = false
+                self.refreshNemotronModelStatus()
             } catch {
                 let durationSeconds = Observability.durationSeconds(since: operationContext.startedAt)
                 let errorType = TelemetryErrorClassifier.classify(error)
@@ -469,11 +465,9 @@ public final class EngineSettingsViewModel {
                     durationSeconds: durationSeconds,
                     errorType: errorType
                 ))
-                await MainActor.run {
-                    self.nemotronDownloading = false
-                    self.nemotronModelStatus = .failed
-                    self.nemotronModelStatusDetail = error.localizedDescription
-                }
+                self.nemotronDownloading = false
+                self.nemotronModelStatus = .failed
+                self.nemotronModelStatusDetail = error.localizedDescription
             }
         }
     }
@@ -529,10 +523,8 @@ public final class EngineSettingsViewModel {
                     durationSeconds: durationSeconds,
                     errorType: nil
                 ))
-                await MainActor.run {
-                    self.whisperDownloading = false
-                    self.refreshWhisperModelStatus()
-                }
+                self.whisperDownloading = false
+                self.refreshWhisperModelStatus()
             } catch is CancellationError {
                 let durationSeconds = Observability.durationSeconds(since: operationContext.startedAt)
                 Telemetry.send(.modelOperation(
@@ -547,10 +539,8 @@ public final class EngineSettingsViewModel {
                     durationSeconds: durationSeconds,
                     errorType: "CancellationError"
                 ))
-                await MainActor.run {
-                    self.whisperDownloading = false
-                    self.refreshWhisperModelStatus()
-                }
+                self.whisperDownloading = false
+                self.refreshWhisperModelStatus()
             } catch {
                 let durationSeconds = Observability.durationSeconds(since: operationContext.startedAt)
                 let errorType = TelemetryErrorClassifier.classify(error)
@@ -573,11 +563,9 @@ public final class EngineSettingsViewModel {
                     durationSeconds: durationSeconds,
                     errorType: errorType
                 ))
-                await MainActor.run {
-                    self.whisperDownloading = false
-                    self.whisperModelStatus = .failed
-                    self.whisperModelStatusDetail = error.localizedDescription
-                }
+                self.whisperDownloading = false
+                self.whisperModelStatus = .failed
+                self.whisperModelStatusDetail = error.localizedDescription
             }
         }
     }
@@ -892,10 +880,8 @@ public final class EngineSettingsViewModel {
                     errorType: nil
                 ))
 
-                await MainActor.run {
-                    self.parakeetRepairing = false
-                    self.refreshModelStatus()
-                }
+                self.parakeetRepairing = false
+                self.refreshModelStatus()
             } catch is CancellationError {
                 Telemetry.send(.modelOperation(
                     operationID: operationContext.operationID,
@@ -908,10 +894,8 @@ public final class EngineSettingsViewModel {
                     durationSeconds: Observability.durationSeconds(since: operationContext.startedAt),
                     errorType: "CancellationError"
                 ))
-                await MainActor.run {
-                    self.parakeetRepairing = false
-                    self.refreshModelStatus()
-                }
+                self.parakeetRepairing = false
+                self.refreshModelStatus()
             } catch {
                 let errorType = TelemetryErrorClassifier.classify(error)
                 Telemetry.send(.modelOperation(
@@ -925,11 +909,9 @@ public final class EngineSettingsViewModel {
                     durationSeconds: Observability.durationSeconds(since: operationContext.startedAt),
                     errorType: errorType
                 ))
-                await MainActor.run {
-                    self.parakeetRepairing = false
-                    self.parakeetStatus = .failed
-                    self.parakeetStatusDetail = error.localizedDescription
-                }
+                self.parakeetRepairing = false
+                self.parakeetStatus = .failed
+                self.parakeetStatusDetail = error.localizedDescription
             }
         }
     }

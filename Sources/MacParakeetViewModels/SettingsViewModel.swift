@@ -342,104 +342,6 @@ public final class SettingsViewModel {
             Telemetry.send(.settingChanged(setting: .speakerDiarization))
         }
     }
-    public var speechEnginePreference: SpeechEnginePreference {
-        get { engine.speechEnginePreference }
-        set { engine.speechEnginePreference = newValue }
-    }
-    /// Which Parakeet build (multilingual `v3` vs English-only `v2`) is active.
-    /// Changing it live-reloads the model when Parakeet is the selected engine
-    /// (downloading the target on first use); see `applyParakeetModelVariantChange`.
-    public var parakeetModelVariant: ParakeetModelVariant {
-        get { engine.parakeetModelVariant }
-        set { engine.parakeetModelVariant = newValue }
-    }
-    /// Which Nemotron build (multilingual vs English-only) is active. Changing
-    /// it live-reloads the model when Nemotron is the selected engine
-    /// (downloading the target on first use); see `applyNemotronModelVariantChange`.
-    public var nemotronModelVariant: NemotronModelVariant {
-        get { engine.nemotronModelVariant }
-        set { engine.nemotronModelVariant = newValue }
-    }
-    public var whisperDefaultLanguage: String {
-        get { engine.whisperDefaultLanguage }
-        set { engine.whisperDefaultLanguage = newValue }
-    }
-    public var speechEngineSwitching: Bool {
-        get { engine.speechEngineSwitching }
-        set { engine.speechEngineSwitching = newValue }
-    }
-    public var speechEngineSwitchTarget: SpeechEnginePreference? {
-        get { engine.speechEngineSwitchTarget }
-        set { engine.speechEngineSwitchTarget = newValue }
-    }
-    public var speechEngineSwitchDetail: String? {
-        get { engine.speechEngineSwitchDetail }
-        set { engine.speechEngineSwitchDetail = newValue }
-    }
-    public var pendingSpeechEngineSwitchConfirmation: SpeechEnginePreference? {
-        get { engine.pendingSpeechEngineSwitchConfirmation }
-        set { engine.pendingSpeechEngineSwitchConfirmation = newValue }
-    }
-    /// True while a Parakeet *build* swap (v3 ↔ v2) is in flight, as opposed to
-    /// an engine switch. Both set `speechEngineSwitchTarget = .parakeet`, so the
-    /// banner needs this to avoid the misleading "Switching to Parakeet" copy
-    /// when the user is already on Parakeet and only changing the build.
-    public var isParakeetVariantSwitch: Bool {
-        get { engine.isParakeetVariantSwitch }
-        set { engine.isParakeetVariantSwitch = newValue }
-    }
-    /// Nemotron counterpart of `isParakeetVariantSwitch` (multilingual ↔
-    /// English build swap while Nemotron is already the active engine).
-    public var isNemotronVariantSwitch: Bool {
-        get { engine.isNemotronVariantSwitch }
-        set { engine.isNemotronVariantSwitch = newValue }
-    }
-    public var speechEngineSwitchAvailability: SpeechEngineSwitchAvailability {
-        get { engine.speechEngineSwitchAvailability }
-        set { engine.speechEngineSwitchAvailability = newValue }
-    }
-    public var speechEngineError: String? {
-        get { engine.speechEngineError }
-        set { engine.speechEngineError = newValue }
-    }
-    public var whisperModelStatus: LocalModelStatus {
-        get { engine.whisperModelStatus }
-        set { engine.whisperModelStatus = newValue }
-    }
-    public var whisperModelStatusDetail: String {
-        get { engine.whisperModelStatusDetail }
-        set { engine.whisperModelStatusDetail = newValue }
-    }
-    public var whisperDownloading: Bool {
-        get { engine.whisperDownloading }
-        set { engine.whisperDownloading = newValue }
-    }
-    public var nemotronModelStatus: LocalModelStatus {
-        get { engine.nemotronModelStatus }
-        set { engine.nemotronModelStatus = newValue }
-    }
-    public var nemotronModelStatusDetail: String {
-        get { engine.nemotronModelStatusDetail }
-        set { engine.nemotronModelStatusDetail = newValue }
-    }
-    public var nemotronDownloading: Bool {
-        get { engine.nemotronDownloading }
-        set { engine.nemotronDownloading = newValue }
-    }
-    public var isNemotronModelAvailable: Bool {
-        engine.isNemotronModelAvailable
-    }
-    public var isWhisperModelDownloaded: Bool {
-        engine.isWhisperModelDownloaded
-    }
-    /// True once the active Whisper variant has paid its one-time on-device
-    /// optimize, so the next load is fast. Drives cold ("Setup needed",
-    /// minutes) vs warm ("Downloaded", seconds) status in the engine picker.
-    /// Reads through `defaults`; the value flips after the first successful
-    /// `WhisperEngine.prepare()`, surfaced on the next `refreshModelStatus()`.
-    public var whisperHasBeenOptimized: Bool {
-        engine.whisperHasBeenOptimized
-    }
     public private(set) var pendingMeetingRecoveryCount = 0
     public var onRecoverPendingMeetingRecordings: (() -> Void)?
 
@@ -580,34 +482,6 @@ public final class SettingsViewModel {
             return String(format: "%.1f GB", mb / 1024)
         }
         return String(format: "%.0f MB", mb)
-    }
-
-    // Local model status / repair
-    public var parakeetStatus: LocalModelStatus {
-        get { engine.parakeetStatus }
-        set { engine.parakeetStatus = newValue }
-    }
-    public var parakeetStatusDetail: String {
-        get { engine.parakeetStatusDetail }
-        set { engine.parakeetStatusDetail = newValue }
-    }
-    public var parakeetRepairing: Bool {
-        get { engine.parakeetRepairing }
-        set { engine.parakeetRepairing = newValue }
-    }
-    /// Which Parakeet builds are present on disk. Drives the per-variant
-    /// download badges in the Parakeet Model card; refreshed in
-    /// `refreshModelStatus()`.
-    public var downloadedParakeetVariants: Set<ParakeetModelVariant> {
-        get { engine.downloadedParakeetVariants }
-        set { engine.downloadedParakeetVariants = newValue }
-    }
-    /// Which Nemotron builds are present on disk. Drives the per-variant
-    /// download badges in the Nemotron Model card; refreshed in
-    /// `refreshModelStatus()`. Both builds can be installed independently.
-    public var downloadedNemotronVariants: Set<NemotronModelVariant> {
-        get { engine.downloadedNemotronVariants }
-        set { engine.downloadedNemotronVariants = newValue }
     }
 
     // Licensing / entitlements
@@ -1037,8 +911,8 @@ public final class SettingsViewModel {
         refreshPermissions()
         refreshStats()
         refreshEntitlements()
-        refreshModelStatus()
-        refreshSpeechEngineSwitchAvailability()
+        engine.refreshModelStatus()
+        engine.refreshSpeechEngineSwitchAvailability()
         refreshPendingMeetingRecoveries()
     }
 
@@ -1236,14 +1110,14 @@ public final class SettingsViewModel {
     public func startPermissionPolling() {
         guard permissionPollingTask == nil else { return }
         refreshPermissions()
-        refreshSpeechEngineSwitchAvailability()
+        engine.refreshSpeechEngineSwitchAvailability()
         permissionPollingTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: self.permissionPollingInterval)
                 guard !Task.isCancelled else { break }
                 self.refreshPermissions()
-                self.refreshSpeechEngineSwitchAvailability()
+                self.engine.refreshSpeechEngineSwitchAvailability()
             }
         }
     }
@@ -1265,37 +1139,6 @@ public final class SettingsViewModel {
         refreshStorageStats()
     }
 
-    public func refreshSpeechEngineSwitchAvailability() {
-        engine.refreshSpeechEngineSwitchAvailability()
-    }
-
-    @discardableResult
-    public func refreshSpeechEngineSwitchAvailabilityNow() async -> SpeechEngineSwitchAvailability {
-        await engine.refreshSpeechEngineSwitchAvailabilityNow()
-    }
-
-    public var speechEngineSwitchUnavailableMessage: String? {
-        engine.speechEngineSwitchUnavailableMessage
-    }
-
-    public static func speechEngineSwitchUnavailableMessage(
-        for availability: SpeechEngineSwitchAvailability
-    ) -> String? {
-        EngineSettingsViewModel.speechEngineSwitchUnavailableMessage(for: availability)
-    }
-
-    public func requestSpeechEngineSwitchConfirmation(to preference: SpeechEnginePreference) {
-        engine.requestSpeechEngineSwitchConfirmation(to: preference)
-    }
-
-    public func cancelPendingSpeechEngineSwitchConfirmation() {
-        engine.cancelPendingSpeechEngineSwitchConfirmation()
-    }
-
-    public func confirmPendingSpeechEngineSwitch() {
-        engine.confirmPendingSpeechEngineSwitch()
-    }
-
     public func refreshEntitlements() {
         guard let service = entitlementsService else { return }
         licensingError = nil
@@ -1305,57 +1148,6 @@ public final class SettingsViewModel {
                 self.applyEntitlementsState(state)
             }
         }
-    }
-
-    public func refreshModelStatus() {
-        engine.refreshModelStatus()
-    }
-
-    public func refreshWhisperModelStatus() {
-        engine.refreshWhisperModelStatus()
-    }
-
-    public func refreshNemotronModelStatus() {
-        engine.refreshNemotronModelStatus()
-    }
-
-    public func downloadNemotronModel() {
-        engine.downloadNemotronModel()
-    }
-
-    public func downloadWhisperModel() {
-        engine.downloadWhisperModel()
-    }
-
-    public func repairParakeetModel() {
-        engine.repairParakeetModel()
-    }
-
-    /// Removes a downloaded Parakeet build, freeing ~465 MB. The selected
-    /// Parakeet build is protected — the UI only offers delete for the other,
-    /// downloaded build, and the guards here enforce that even if a stale tap
-    /// slips through. The "Downloaded" badge drops immediately; a disk refresh
-    /// then confirms.
-    public func deleteParakeetVariant(_ variant: ParakeetModelVariant) {
-        engine.deleteParakeetVariant(variant)
-    }
-
-    /// Removes a downloaded Nemotron build. The non-selected build is
-    /// deletable any time (Nemotron Model card). The selected build is
-    /// protected while Nemotron is the active engine; when Nemotron is
-    /// inactive it keeps its existing delete affordance (Local Models
-    /// overflow) so the next active use has an explicit download moment
-    /// instead of a surprise re-fetch.
-    public func deleteNemotronVariant(_ variant: NemotronModelVariant) {
-        engine.deleteNemotronVariant(variant)
-    }
-
-    /// Removes the downloaded Whisper variant, freeing ~632 MB. Only callable
-    /// while Parakeet is the active engine — deleting the model behind the
-    /// active engine would force a silent re-download. State flips to
-    /// "Not Downloaded" immediately; a disk refresh then confirms.
-    public func deleteWhisperModel() {
-        engine.deleteWhisperModel()
     }
 
     public func activateLicense() {
