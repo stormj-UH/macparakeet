@@ -23,6 +23,33 @@ final class MeetingTranscriptAssemblerTests: XCTestCase {
         XCTAssertEqual(update.words.map(\.speakerId), ["microphone", "microphone", "microphone"])
     }
 
+    func testApplySynthesizesLivePreviewWordsForTextOnlyResult() {
+        var assembler = MeetingTranscriptAssembler()
+
+        let chunk = AudioChunker.AudioChunk(samples: [0], startMs: 4_000, endMs: 9_000)
+        let result = STTResult(text: "Hello unified world.", words: [])
+        let update = assembler.apply(result: result, chunk: chunk, source: .microphone)
+
+        XCTAssertEqual(update.words.map(\.word), ["Hello", "unified", "world."])
+        XCTAssertEqual(update.words.map(\.speakerId), ["microphone", "microphone", "microphone"])
+        XCTAssertEqual(update.words.first?.startMs, 0)
+        XCTAssertEqual(update.words.last?.endMs, 5_000)
+        XCTAssertEqual(update.speakers, [SpeakerInfo(id: "microphone", label: "Me")])
+    }
+
+    func testApplyIgnoresTextOnlyResultWithoutWords() {
+        var assembler = MeetingTranscriptAssembler()
+
+        let update = assembler.apply(
+            result: STTResult(text: " \n\t ", words: []),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 5_000),
+            source: .microphone
+        )
+
+        XCTAssertTrue(update.words.isEmpty)
+        XCTAssertTrue(update.speakers.isEmpty)
+    }
+
     func testFinalizedTranscriptBuildsSpeakerMetadataAcrossSources() {
         var assembler = MeetingTranscriptAssembler()
 

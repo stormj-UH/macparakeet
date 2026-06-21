@@ -55,15 +55,7 @@ struct MeetingTranscriptAssembler {
         chunk: AudioChunker.AudioChunk,
         source: AudioSource
     ) -> MeetingTranscriptUpdate {
-        let offsetWords = result.words.map {
-            WordTimestamp(
-                word: $0.word,
-                startMs: $0.startMs + chunk.startMs,
-                endMs: $0.endMs + chunk.startMs,
-                confidence: $0.confidence,
-                speakerId: source.rawValue
-            )
-        }
+        let offsetWords = Self.offsetWords(from: result, chunk: chunk, source: source)
 
         let cutoff = lastCommittedEndMs[source] ?? Int.min
         let deduplicated = offsetWords.filter { $0.endMs > cutoff }
@@ -74,6 +66,48 @@ struct MeetingTranscriptAssembler {
         }
 
         return currentUpdate
+    }
+
+    private static func offsetWords(
+        from result: STTResult,
+        chunk: AudioChunker.AudioChunk,
+        source: AudioSource
+    ) -> [WordTimestamp] {
+        if !result.words.isEmpty {
+            return result.words.map {
+                WordTimestamp(
+                    word: $0.word,
+                    startMs: $0.startMs + chunk.startMs,
+                    endMs: $0.endMs + chunk.startMs,
+                    confidence: $0.confidence,
+                    speakerId: source.rawValue
+                )
+            }
+        }
+
+        return synthesizeWords(from: result.text, chunk: chunk, source: source)
+    }
+
+    private static func synthesizeWords(
+        from text: String,
+        chunk: AudioChunker.AudioChunk,
+        source: AudioSource
+    ) -> [WordTimestamp] {
+        let tokens = text.split { $0.isWhitespace }.map(String.init)
+        guard !tokens.isEmpty else { return [] }
+
+        let durationMs = max(chunk.endMs - chunk.startMs, tokens.count)
+        return tokens.enumerated().map { index, token in
+            let startMs = chunk.startMs + (durationMs * index / tokens.count)
+            let endMs = chunk.startMs + max(durationMs * (index + 1) / tokens.count, index + 1)
+            return WordTimestamp(
+                word: token,
+                startMs: startMs,
+                endMs: endMs,
+                confidence: 0,
+                speakerId: source.rawValue
+            )
+        }
     }
 
     var currentUpdate: MeetingTranscriptUpdate {
