@@ -113,7 +113,10 @@ struct MeetingTranscriptAssembler {
         committedThroughMs: Int?
     ) -> [WordTimestamp] {
         let rawTokens = text.split { $0.isWhitespace }.map(String.init)
-        let tokens = trimOverlappingPrefix(rawTokens, committedWords: committedWords)
+        let hasTemporalOverlap = committedThroughMs.map { $0 > chunk.startMs } ?? false
+        let tokens = hasTemporalOverlap
+            ? trimOverlappingPrefix(rawTokens, committedWords: committedWords)
+            : rawTokens
         guard !tokens.isEmpty else { return [] }
 
         let startBoundary = committedThroughMs

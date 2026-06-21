@@ -57,6 +57,26 @@ final class MeetingTranscriptAssemblerTests: XCTestCase {
         XCTAssertEqual(update.words.last?.endMs, 9_000)
     }
 
+    func testApplyPreservesRepeatedPrefixForContiguousTextOnlyChunks() {
+        var assembler = MeetingTranscriptAssembler()
+
+        _ = assembler.apply(
+            result: STTResult(text: "yes", words: []),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 1_000),
+            source: .microphone
+        )
+
+        let update = assembler.apply(
+            result: STTResult(text: "yes please", words: []),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 1_000, endMs: 3_000),
+            source: .microphone
+        )
+
+        XCTAssertEqual(update.words.map(\.word), ["yes", "yes", "please"])
+        XCTAssertEqual(update.words[1].startMs, 1_000)
+        XCTAssertEqual(update.words.last?.endMs, 3_000)
+    }
+
     func testApplyIgnoresTextOnlyResultWithoutWords() {
         var assembler = MeetingTranscriptAssembler()
 
