@@ -37,6 +37,26 @@ final class MeetingTranscriptAssemblerTests: XCTestCase {
         XCTAssertEqual(update.speakers, [SpeakerInfo(id: "microphone", label: "Me")])
     }
 
+    func testApplyTrimsTextOnlyOverlapPrefix() {
+        var assembler = MeetingTranscriptAssembler()
+
+        _ = assembler.apply(
+            result: STTResult(text: "Hello team", words: []),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 0, endMs: 5_000),
+            source: .microphone
+        )
+
+        let update = assembler.apply(
+            result: STTResult(text: "Team, again", words: []),
+            chunk: AudioChunker.AudioChunk(samples: [0], startMs: 4_000, endMs: 9_000),
+            source: .microphone
+        )
+
+        XCTAssertEqual(update.words.map(\.word), ["Hello", "team", "again"])
+        XCTAssertEqual(update.words.last?.startMs, 5_000)
+        XCTAssertEqual(update.words.last?.endMs, 9_000)
+    }
+
     func testApplyIgnoresTextOnlyResultWithoutWords() {
         var assembler = MeetingTranscriptAssembler()
 

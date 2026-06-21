@@ -41,6 +41,7 @@ public struct MeetingRealtimeTranscript: Sendable, Equatable {
 
 struct MeetingTranscriptAssembler {
     private static let orderedSources: [AudioSource] = [.microphone, .system]
+    private static let syntheticOverlapAnchorLength = 6
 
     private var wordsBySource: [AudioSource: [WordTimestamp]] = [:]
     private var lastCommittedEndMs: [AudioSource: Int] = [:]
@@ -55,10 +56,18 @@ struct MeetingTranscriptAssembler {
         chunk: AudioChunker.AudioChunk,
         source: AudioSource
     ) -> MeetingTranscriptUpdate {
-        let offsetWords = Self.offsetWords(from: result, chunk: chunk, source: source)
-
-        let cutoff = lastCommittedEndMs[source] ?? Int.min
-        let deduplicated = offsetWords.filter { $0.endMs > cutoff }
+        let cutoff = lastCommittedEndMs[source]
+        let offsetWords = Self.offsetWords(
+            from: result,
+            chunk: chunk,
+            source: source,
+            committedWords: wordsBySource[source] ?? [],
+            committedThroughMs: cutoff
+        )
+        let deduplicated = offsetWords.filter { word in
+            guard let cutoff else { return true }
+            return word.endMs > cutoff
+        }
 
         if !deduplicated.isEmpty {
             wordsBySource[source, default: []].append(contentsOf: deduplicated)
@@ -71,7 +80,9 @@ struct MeetingTranscriptAssembler {
     private static func offsetWords(
         from result: STTResult,
         chunk: AudioChunker.AudioChunk,
-        source: AudioSource
+        source: AudioSource,
+        committedWords: [WordTimestamp],
+        committedThroughMs: Int?
     ) -> [WordTimestamp] {
         if !result.words.isEmpty {
             return result.words.map {
@@ -85,21 +96,35 @@ struct MeetingTranscriptAssembler {
             }
         }
 
-        return synthesizeWords(from: result.text, chunk: chunk, source: source)
+        return synthesizeWords(
+            from: result.text,
+            chunk: chunk,
+            source: source,
+            committedWords: committedWords,
+            committedThroughMs: committedThroughMs
+        )
     }
 
     private static func synthesizeWords(
         from text: String,
         chunk: AudioChunker.AudioChunk,
-        source: AudioSource
+        source: AudioSource,
+        committedWords: [WordTimestamp],
+        committedThroughMs: Int?
     ) -> [WordTimestamp] {
-        let tokens = text.split { $0.isWhitespace }.map(String.init)
+        let rawTokens = text.split { $0.isWhitespace }.map(String.init)
+        let tokens = trimOverlappingPrefix(rawTokens, committedWords: committedWords)
         guard !tokens.isEmpty else { return [] }
 
-        let durationMs = max(chunk.endMs - chunk.startMs, tokens.count)
+        let startBoundary = committedThroughMs
+            .map { max(chunk.startMs, min($0, chunk.endMs)) }
+            ?? chunk.startMs
+        guard startBoundary < chunk.endMs else { return [] }
+
+        let durationMs = max(chunk.endMs - startBoundary, tokens.count)
         return tokens.enumerated().map { index, token in
-            let startMs = chunk.startMs + (durationMs * index / tokens.count)
-            let endMs = chunk.startMs + max(durationMs * (index + 1) / tokens.count, index + 1)
+            let startMs = startBoundary + (durationMs * index / tokens.count)
+            let endMs = startBoundary + (durationMs * (index + 1) / tokens.count)
             return WordTimestamp(
                 word: token,
                 startMs: startMs,
@@ -109,6 +134,36 @@ struct MeetingTranscriptAssembler {
             )
         }
     }
+
+    private static func trimOverlappingPrefix(
+        _ tokens: [String],
+        committedWords: [WordTimestamp]
+    ) -> [String] {
+        guard !tokens.isEmpty, !committedWords.isEmpty else { return tokens }
+
+        let normalizedTokens = tokens.map(normalizeOverlapToken)
+        let normalizedCommitted = committedWords
+            .suffix(syntheticOverlapAnchorLength)
+            .map { normalizeOverlapToken($0.word) }
+        var overlap = min(normalizedTokens.count, normalizedCommitted.count)
+
+        while overlap > 0 {
+            if normalizedCommitted.suffix(overlap).elementsEqual(normalizedTokens.prefix(overlap)) {
+                return Array(tokens.dropFirst(overlap))
+            }
+            overlap -= 1
+        }
+
+        return tokens
+    }
+
+    private static func normalizeOverlapToken(_ token: String) -> String {
+        let trimmed = token.trimmingCharacters(in: overlapTrimSet)
+        return trimmed.isEmpty ? token.lowercased() : trimmed.lowercased()
+    }
+
+    private static let overlapTrimSet = CharacterSet.punctuationCharacters
+        .union(.symbols)
 
     var currentUpdate: MeetingTranscriptUpdate {
         let words = normalizedWords()
