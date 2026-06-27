@@ -389,9 +389,11 @@ GO if, on the domain-matched gold set:
   the v1 scope (cleanup + summary + Ask; tool-calling is Phase 3).
 
 NO-GO / re-scope triggers: gates fail too often even at 8-bit (over-edit/
-hallucination intrinsic at 4B) → consider the 30B-A3B tier (≥48 GB gate) or keep
-cloud default; prefill makes the long-transcript UX untenable even with map-reduce
-→ restructure or defer long-transcript cleanup.
+hallucination intrinsic at 4B) → consider the 30B-A3B tier (parent plan §3 places
+this at the **32 GB** RAM tier, ~18.6 GB weights; in practice gate the *fallback*
+higher — ~48 GB — to leave headroom for Parakeet + diarizer + long-context KV, since
+MLX OOM is a hard crash) or keep cloud default; prefill makes the long-transcript UX
+untenable even with map-reduce → restructure or defer long-transcript cleanup.
 
 ---
 
