@@ -166,6 +166,12 @@ shape in `MeetingEchoSuppressionRuntime` and `StreamingMeetingEchoSuppressor`;
 the missing part is packaging, validation, and deciding whether the cleaned
 track becomes an inspectable retained artifact.
 
+Verified 2026-06-27: `Muesli-HQ/muesli` is a real MIT-licensed Apple-Silicon
+Swift app, and its README confirms the bundled-`localvqe-v1.2-1.3M-f32.gguf`-by-
+default with DTLN-fallback packaging this section relies on. It is the existence
+proof that the LocalVQE-first, DTLN-second shape ships in a current Swift macOS
+meeting recorder.
+
 ### Corti FDAF/NLMS
 
 Primary source: [vasovagal/corti](https://github.com/vasovagal/corti)
@@ -220,6 +226,21 @@ Most relevant options:
 Applicability to MacParakeet: high. The current MacParakeet runtime expects a
 LocalVQE-compatible dynamic library and model, so this is the shortest path to
 turning the scaffold into a testable implementation.
+
+**Primary-source verification (2026-06-27).** The `localai-org/LocalVQE`
+repository was confirmed against its own source rather than cited from memory. It
+is a C++/GGML voice-quality stack that builds `liblocalvqe` as a shared library
+(`-DLOCALVQE_BUILD_SHARED=ON`, i.e. the `.dylib` the runtime `dlopen`s) and ships
+the `.gguf` models the runtime names, including `localvqe-v1.2-1.3M-f32.gguf` and
+the `localvqe-v1.4-aec` echo-only variants. Its `ggml/localvqe_api.h` exports
+every symbol `MeetingEchoSuppressionRuntime` loads: `localvqe_new`,
+`localvqe_process_frame_f32`, `localvqe_reset`, and `localvqe_free` as the
+required set, plus `localvqe_sample_rate`, `localvqe_hop_length`, and
+`localvqe_last_error` as the optional probes. The header documents 16 kHz audio
+with a 256-sample hop (and 512-sample FFT), matching the runtime's
+`defaultSampleRate` (16000) and `defaultFrameSize` (256). The loader's C ABI is
+therefore a real, exact match, not an invented contract — the remaining work is
+binary packaging, model selection, and fixtures, not API design.
 
 ### Secondary references checked
 
