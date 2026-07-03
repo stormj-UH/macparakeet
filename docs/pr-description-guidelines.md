@@ -40,7 +40,8 @@ The settled decisions and why — link the brief/plan/ADR that governed
 the work rather than re-arguing it. Note decisions the diff makes
 that the brief did NOT settle.
 
-## How it works        <- the visual section; see "Show, don't narrate"
+## How it works
+<!-- Visual section; see "Show, don't narrate" -->
 Sequence / flow / state diagram, or before→after table — whichever
 single visual makes the mechanism obvious. Skip entirely when the
 change has no structural story (copy edits, version bumps).
