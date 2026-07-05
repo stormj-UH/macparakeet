@@ -24,6 +24,7 @@ public final class InProcessModelManagerViewModel {
     private var llmClient: (any LLMClientProtocol)?
     private var onConfigurationChanged: (() -> Void)?
     private var physicalMemoryBytes: UInt64
+    private var setupTask: Task<Void, Never>?
 
     public init(physicalMemoryBytes: UInt64 = ProcessInfo.processInfo.physicalMemory) {
         self.physicalMemoryBytes = physicalMemoryBytes
@@ -68,17 +69,29 @@ public final class InProcessModelManagerViewModel {
     }
 
     public func refresh() async {
-        guard meetsMemoryRequirement else {
-            isModelDownloaded = false
-            state = .setUpNeeded
-            return
-        }
         guard let downloader else {
             state = .setUpNeeded
             return
         }
         isModelDownloaded = await downloader.isDefaultModelDownloaded()
         state = isModelDownloaded ? .ready : .setUpNeeded
+    }
+
+    public var isDownloading: Bool {
+        if case .downloading = state { return true }
+        return false
+    }
+
+    public func startEnableLocalAI() {
+        guard setupTask == nil else { return }
+        setupTask = Task {
+            await enableLocalAI()
+            setupTask = nil
+        }
+    }
+
+    public func cancelSetup() {
+        setupTask?.cancel()
     }
 
     public func enableLocalAI() async {
@@ -103,10 +116,9 @@ public final class InProcessModelManagerViewModel {
             _ = try await downloader.downloadDefaultModel { [weak self] progress in
                 await self?.updateDownloadProgress(progress)
             }
+            isModelDownloaded = true
 
             state = .verifying
-            _ = try await downloader.verifyDefaultModel()
-            isModelDownloaded = true
 
             let config = LLMProviderConfig.inProcessLocal(
                 model: InProcessLocalModelCatalog.defaultManifest.modelID

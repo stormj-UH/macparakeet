@@ -315,8 +315,17 @@ struct LLMSettingsView: View {
                 .disabled(manager.isWorking)
             }
 
+            if manager.isDownloading {
+                Button {
+                    manager.cancelSetup()
+                } label: {
+                    Label("Cancel", systemImage: "xmark.circle")
+                }
+                .parakeetAction(.secondary)
+            }
+
             Button {
-                Task { await manager.enableLocalAI() }
+                manager.startEnableLocalAI()
             } label: {
                 Label(localAIPrimaryButtonTitle, systemImage: manager.isModelDownloaded ? "checkmark.circle" : "arrow.down.circle")
             }

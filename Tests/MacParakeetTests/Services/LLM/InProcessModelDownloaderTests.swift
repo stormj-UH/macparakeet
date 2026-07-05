@@ -63,6 +63,47 @@ final class InProcessModelDownloaderTests: XCTestCase {
         )
     }
 
+    func testDownloadPromotesCompleteVerifiedPartialWithoutRedownloading() async throws {
+        let fixture = try makeFixture(files: ["model.safetensors": Data("abcdef".utf8)])
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true)
+        let partial = fixture.directory.appendingPathComponent(".model.safetensors.part")
+        try Data("abcdef".utf8).write(to: partial)
+        let downloader = InProcessModelDownloader(
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root,
+            transport: fixture.transport
+        )
+
+        _ = try await downloader.downloadDefaultModel()
+
+        let requests = await fixture.transport.requests()
+        XCTAssertTrue(requests.isEmpty)
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.directory.appendingPathComponent("model.safetensors")),
+            Data("abcdef".utf8)
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
+    }
+
+    func testIsDefaultModelDownloadedChecksPresenceAndSize() async throws {
+        let fixture = try makeFixture()
+        try writeFixtureFiles(fixture)
+        let downloader = InProcessModelDownloader(
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root,
+            transport: fixture.transport
+        )
+
+        let downloaded = await downloader.isDefaultModelDownloaded()
+        XCTAssertTrue(downloaded)
+
+        try FileManager.default.removeItem(
+            at: fixture.directory.appendingPathComponent("config.json")
+        )
+        let afterRemoval = await downloader.isDefaultModelDownloaded()
+        XCTAssertFalse(afterRemoval)
+    }
+
     func testDeleteRemovesModelDirectory() async throws {
         let fixture = try makeFixture()
         try writeFixtureFiles(fixture)

@@ -92,7 +92,7 @@ public enum InProcessLocalModelCatalog {
         modelID: "mlx-community/Qwen3-4B-Instruct-2507-DDWQ",
         displayName: "Qwen3 4B Instruct (DDWQ)",
         repositoryID: "mlx-community/Qwen3-4B-Instruct-2507-DDWQ",
-        revision: "main",
+        revision: "88033de44951ebedb96e0adb68cc037443aab93a",
         files: [
             InProcessLocalModelFile(
                 path: "added_tokens.json",
@@ -191,7 +191,10 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
     }
 
     public func isDefaultModelDownloaded() async -> Bool {
-        (try? await verifyDefaultModel()) != nil
+        let directory = modelDirectory()
+        return manifest.files.allSatisfy { file in
+            fileSize(at: directory.appendingPathComponent(file.path)) == file.sizeBytes
+        }
     }
 
     @discardableResult
@@ -235,7 +238,7 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
             ))
         }
 
-        return try await verifyDefaultModel()
+        return directory
     }
 
     public func deleteDefaultModel() async throws {
@@ -269,8 +272,12 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
         while attempts < 2 {
             attempts += 1
             try Task.checkCancellation()
-            let resumeOffset = min(fileSize(at: partial) ?? 0, file.sizeBytes)
-            if resumeOffset >= file.sizeBytes {
+            let partialSize = fileSize(at: partial) ?? 0
+            if partialSize >= file.sizeBytes {
+                if partialSize == file.sizeBytes, (try? verify(file: file, at: partial)) != nil {
+                    try fileManager.moveItem(at: partial, to: destination)
+                    return
+                }
                 try? fileManager.removeItem(at: partial)
             }
             let effectiveResumeOffset = fileSize(at: partial) ?? 0
@@ -281,22 +288,38 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                 currentFile: file.path
             ))
 
-            try await transport.download(
-                InProcessModelDownloadRequest(
-                    url: downloadURL(for: file),
-                    resumeOffset: effectiveResumeOffset
-                ),
-                to: partial
-            ) { delta in
-                let fileBytes = min(accumulator.add(delta), file.sizeBytes)
-                let progressValue = self.progressValue(
-                    completedBytes: completedBytesBeforeFile + fileBytes,
-                    completedFiles: self.completedFiles(before: file),
-                    currentFile: file.path
-                )
-                Task {
-                    await progress(progressValue)
+            let (updates, updatesContinuation) = AsyncStream.makeStream(
+                of: InProcessModelDownloadProgress.self,
+                bufferingPolicy: .bufferingNewest(1)
+            )
+            let progressForwarder = Task {
+                for await value in updates {
+                    await progress(value)
                 }
+            }
+            do {
+                try await transport.download(
+                    InProcessModelDownloadRequest(
+                        url: downloadURL(for: file),
+                        resumeOffset: effectiveResumeOffset
+                    ),
+                    to: partial
+                ) { delta in
+                    let fileBytes = min(accumulator.add(delta), file.sizeBytes)
+                    updatesContinuation.yield(self.progressValue(
+                        completedBytes: completedBytesBeforeFile + fileBytes,
+                        completedFiles: self.completedFiles(before: file),
+                        currentFile: file.path
+                    ))
+                }
+                updatesContinuation.finish()
+                await progressForwarder.value
+            } catch {
+                updatesContinuation.finish()
+                progressForwarder.cancel()
+                await progressForwarder.value
+                try Task.checkCancellation()
+                throw error
             }
 
             do {

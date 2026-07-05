@@ -51,7 +51,7 @@ final class InProcessModelManagerViewModelTests: XCTestCase {
         let downloadCallCount = await downloader.downloadCallCount()
         let verifyCallCount = await downloader.verifyCallCount()
         XCTAssertEqual(downloadCallCount, 1)
-        XCTAssertEqual(verifyCallCount, 1)
+        XCTAssertEqual(verifyCallCount, 0)
         XCTAssertEqual(configStore.config?.id, .inProcessLocal)
         XCTAssertEqual(configStore.config?.modelName, InProcessLocalModelCatalog.defaultManifest.modelID)
         XCTAssertEqual(client.capturedContext?.providerConfig.id, .inProcessLocal)
@@ -81,6 +81,51 @@ final class InProcessModelManagerViewModelTests: XCTestCase {
         XCTAssertTrue(recoverable)
     }
 
+    func testRefreshBelowMinimumMemoryStillReportsDownloadedModel() async {
+        let downloader = FakeInProcessModelDownloader(isDownloaded: true)
+        let viewModel = InProcessModelManagerViewModel()
+        viewModel.configure(
+            downloader: downloader,
+            configStore: MockLLMConfigStore(),
+            llmClient: MockLLMClient(),
+            physicalMemoryBytes: 8 * 1024 * 1024 * 1024
+        )
+
+        await viewModel.refresh()
+
+        XCTAssertTrue(viewModel.isModelDownloaded)
+        XCTAssertFalse(viewModel.meetsMemoryRequirement)
+    }
+
+    func testCancelSetupDuringDownloadReportsCanceledStateAndSavesNothing() async throws {
+        let downloader = BlockingInProcessModelDownloader()
+        let configStore = MockLLMConfigStore()
+        let viewModel = InProcessModelManagerViewModel()
+        viewModel.configure(
+            downloader: downloader,
+            configStore: configStore,
+            llmClient: MockLLMClient(),
+            physicalMemoryBytes: 32 * 1024 * 1024 * 1024
+        )
+
+        viewModel.startEnableLocalAI()
+        while !(await downloader.hasStartedDownload()) {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        viewModel.cancelSetup()
+
+        let deadline = Date().addingTimeInterval(10)
+        while viewModel.isWorking, Date() < deadline {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        XCTAssertEqual(
+            viewModel.state,
+            .failed(reason: "Local AI setup was canceled.", recoverable: true)
+        )
+        XCTAssertNil(configStore.config)
+    }
+
     func testDeleteModelClearsSavedLocalProvider() async {
         let downloader = FakeInProcessModelDownloader(isDownloaded: true)
         let configStore = MockLLMConfigStore()
@@ -102,6 +147,39 @@ final class InProcessModelManagerViewModelTests: XCTestCase {
         XCTAssertNil(configStore.config)
         let deleteCallCount = await downloader.deleteCallCount()
         XCTAssertEqual(deleteCallCount, 1)
+    }
+}
+
+private actor BlockingInProcessModelDownloader: InProcessModelDownloading {
+    private var downloadStarted = false
+
+    nonisolated func defaultModelDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("BlockingInProcessModelDownloader", isDirectory: true)
+    }
+
+    func isDefaultModelDownloaded() async -> Bool {
+        false
+    }
+
+    func verifyDefaultModel() async throws -> URL {
+        defaultModelDirectory()
+    }
+
+    func downloadDefaultModel(
+        progress: @escaping InProcessModelDownloadProgressHandler
+    ) async throws -> URL {
+        downloadStarted = true
+        while true {
+            try Task.checkCancellation()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+    }
+
+    func deleteDefaultModel() async throws {}
+
+    func hasStartedDownload() -> Bool {
+        downloadStarted
     }
 }
 
