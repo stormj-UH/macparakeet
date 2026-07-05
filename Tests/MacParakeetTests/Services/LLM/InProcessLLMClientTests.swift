@@ -194,7 +194,9 @@ final class InProcessLLMClientTests: XCTestCase {
             context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "queued-test")),
             options: .default
         )
-        await runtime.waitForRequestCount(1)
+        try await withTimeout {
+            await runtime.waitForRequestCount(1)
+        }
         async let second = client.chatCompletion(
             messages: [ChatMessage(role: .user, content: "Second")],
             context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "queued-test")),
@@ -239,7 +241,9 @@ final class InProcessLLMClientTests: XCTestCase {
             )
         }
 
-        await runtime.waitForRequestCount(1)
+        try await withTimeout {
+            await runtime.waitForRequestCount(1)
+        }
         let queuedTask = Task {
             try await client.chatCompletion(
                 messages: [ChatMessage(role: .user, content: "Second")],
@@ -509,15 +513,42 @@ private actor FakeLocalLLMRuntime: LocalLLMRuntime {
 
     func waitForRequestCount(_ count: Int) async {
         guard requests.count < count else { return }
-        await withCheckedContinuation { continuation in
-            requestCountWaiters.append(CountWaiter(count: count, continuation: continuation))
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if requests.count >= count || Task.isCancelled {
+                    continuation.resume()
+                    return
+                }
+                requestCountWaiters.append(CountWaiter(id: id, count: count, continuation: continuation))
+            }
+        } onCancel: {
+            Task { await self.resumeCancelledWaiter(id: id) }
         }
     }
 
     func waitForUnloadCount(_ count: Int) async {
         guard unloadCalls < count else { return }
-        await withCheckedContinuation { continuation in
-            unloadCountWaiters.append(CountWaiter(count: count, continuation: continuation))
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if unloadCalls >= count || Task.isCancelled {
+                    continuation.resume()
+                    return
+                }
+                unloadCountWaiters.append(CountWaiter(id: id, count: count, continuation: continuation))
+            }
+        } onCancel: {
+            Task { await self.resumeCancelledWaiter(id: id) }
+        }
+    }
+
+    private func resumeCancelledWaiter(id: UUID) {
+        if let index = requestCountWaiters.firstIndex(where: { $0.id == id }) {
+            requestCountWaiters.remove(at: index).continuation.resume()
+        }
+        if let index = unloadCountWaiters.firstIndex(where: { $0.id == id }) {
+            unloadCountWaiters.remove(at: index).continuation.resume()
         }
     }
 
@@ -564,6 +595,7 @@ private actor AsyncGate {
 }
 
 private struct CountWaiter {
+    let id: UUID
     let count: Int
     let continuation: CheckedContinuation<Void, Never>
 }

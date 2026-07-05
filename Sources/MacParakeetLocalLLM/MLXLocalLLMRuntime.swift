@@ -13,8 +13,8 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
     private var modelContainer: ModelContainer?
     private var loadedModel: LocalLLMModelReference?
     private var latestMetrics: LLMGenerationMetrics?
-    private var generationInProgress = false
     private var generationTask: Task<Void, Never>?
+    private var generationInProgress: Bool { generationTask != nil }
     private var unloadAfterGeneration = false
 
     public init() {}
@@ -68,7 +68,6 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
             throw LLMError.modelNotFound("Local MLX model is not loaded.")
         }
 
-        generationInProgress = true
         unloadAfterGeneration = false
         let streamPair = AsyncThrowingStream<LocalLLMRuntimeEvent, Error>.makeStream()
         let task = Task {
@@ -149,7 +148,6 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
     }
 
     private func finishGeneration() {
-        generationInProgress = false
         generationTask = nil
         guard unloadAfterGeneration else { return }
 

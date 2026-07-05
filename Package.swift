@@ -27,6 +27,9 @@ let packageDependencies: [Package.Dependency] = [
     // Metal shaders, so plain `swift build` / `swift test` / CI must not resolve it.
     .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.31.4"),
     .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.31.4"),
+    // Only the Tokenizers product is used (local-directory tokenizer loading).
+    // Held to 1.1.x because argmax-oss-swift (WhisperKit) cannot resolve
+    // alongside swift-transformers 1.3 in the gated dependency graph.
     .package(url: "https://github.com/huggingface/swift-transformers", "1.1.6" ..< "1.2.0"),
 ] : [])
 
