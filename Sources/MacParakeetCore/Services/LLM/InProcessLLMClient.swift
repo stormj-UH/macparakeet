@@ -83,16 +83,18 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
     public func testConnection(context: LLMExecutionContext) async throws {
         try Task.checkCancellation()
-        try await lifetimeCoordinator.beginGeneration()
+        let lease = try await lifetimeCoordinator.beginGeneration()
         do {
             try Task.checkCancellation()
             try await loadRuntime(for: context.providerConfig)
             await lifetimeCoordinator.endGeneration(
+                lease,
                 runtime: runtime,
                 delayNanoseconds: 0
             )
         } catch {
             await lifetimeCoordinator.endGeneration(
+                lease,
                 runtime: runtime,
                 delayNanoseconds: 0
             )
@@ -127,7 +129,7 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         }
 
         try Task.checkCancellation()
-        try await lifetimeCoordinator.beginGeneration()
+        let lease = try await lifetimeCoordinator.beginGeneration()
 
         do {
             try Task.checkCancellation()
@@ -150,12 +152,14 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
             log(metrics: response.metrics, inputCharacters: Self.inputCharacterCount(messages))
             await lifetimeCoordinator.endGeneration(
+                lease,
                 runtime: runtime,
                 delayNanoseconds: idleUnloadDelayNanoseconds
             )
             return response
         } catch {
             await lifetimeCoordinator.endGeneration(
+                lease,
                 runtime: runtime,
                 delayNanoseconds: idleUnloadDelayNanoseconds
             )
@@ -428,45 +432,54 @@ private struct LocalLLMPromptBudget: Sendable {
 
 private actor LocalLLMLifetimeCoordinator {
     private var unloadTask: Task<Void, Never>?
-    private var generationActive = false
+    private var activeGenerationID: UUID?
     private var waitingGenerations: [WaitingGeneration] = []
 
-    func beginGeneration() async throws {
+    func beginGeneration() async throws -> LocalLLMGenerationLease {
         try Task.checkCancellation()
-        if generationActive {
-            let waiterID = UUID()
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        if activeGenerationID != nil {
+            let lease = LocalLLMGenerationLease(id: UUID())
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (
+                    continuation: CheckedContinuation<LocalLLMGenerationLease, Error>
+                ) in
                     waitingGenerations.append(
-                        WaitingGeneration(id: waiterID, continuation: continuation)
+                        WaitingGeneration(lease: lease, continuation: continuation)
                     )
                 }
             } onCancel: {
                 Task {
-                    await self.cancelWaitingGeneration(id: waiterID)
+                    await self.cancelWaitingGeneration(id: lease.id)
                 }
             }
-            try Task.checkCancellation()
-            return
         }
 
-        generationActive = true
+        let lease = LocalLLMGenerationLease(id: UUID())
+        activeGenerationID = lease.id
         cancelPendingUnload()
+        return lease
     }
 
-    func endGeneration(runtime: any LocalLLMRuntime, delayNanoseconds: UInt64) {
+    func endGeneration(
+        _ lease: LocalLLMGenerationLease,
+        runtime: any LocalLLMRuntime,
+        delayNanoseconds: UInt64
+    ) {
+        guard activeGenerationID == lease.id else { return }
+
         if !waitingGenerations.isEmpty {
             let next = waitingGenerations.removeFirst()
-            next.continuation.resume()
+            activeGenerationID = next.lease.id
+            next.continuation.resume(returning: next.lease)
             return
         }
 
-        generationActive = false
+        activeGenerationID = nil
         scheduleUnload(runtime: runtime, delayNanoseconds: delayNanoseconds)
     }
 
     private func cancelWaitingGeneration(id: UUID) {
-        guard let index = waitingGenerations.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = waitingGenerations.firstIndex(where: { $0.lease.id == id }) else { return }
 
         let waitingGeneration = waitingGenerations.remove(at: index)
         waitingGeneration.continuation.resume(throwing: CancellationError())
@@ -496,9 +509,13 @@ private actor LocalLLMLifetimeCoordinator {
     }
 }
 
-private struct WaitingGeneration {
+private struct LocalLLMGenerationLease: Sendable {
     let id: UUID
-    let continuation: CheckedContinuation<Void, Error>
+}
+
+private struct WaitingGeneration {
+    let lease: LocalLLMGenerationLease
+    let continuation: CheckedContinuation<LocalLLMGenerationLease, Error>
 }
 
 private enum ProcessRSSSampler {
