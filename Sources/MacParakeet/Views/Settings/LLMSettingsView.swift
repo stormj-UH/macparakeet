@@ -305,11 +305,11 @@ struct LLMSettingsView: View {
     private var localAIActionButtons: some View {
         let manager = viewModel.inProcessModelManager
         HStack(spacing: DesignSystem.Spacing.xs) {
-            if manager.isModelDownloaded {
+            if manager.isModelDownloaded || manager.hasModelArtifacts {
                 Button {
                     Task { await manager.deleteModel() }
                 } label: {
-                    Label("Delete model", systemImage: "trash")
+                    Label(manager.isModelDownloaded ? "Delete model" : "Delete partial download", systemImage: "trash")
                 }
                 .parakeetAction(.secondary)
                 .disabled(manager.isWorking)

@@ -52,7 +52,7 @@ public protocol InProcessModelDownloadTransport: Sendable {
     func download(
         _ request: InProcessModelDownloadRequest,
         to destination: URL,
-        onBytesReceived: @escaping @Sendable (UInt64) -> Void
+        onTotalBytesWritten: @escaping @Sendable (UInt64) -> Void
     ) async throws
 }
 
@@ -62,6 +62,7 @@ public typealias InProcessModelDownloadProgressHandler =
 public protocol InProcessModelDownloading: Sendable {
     func defaultModelDirectory() -> URL
     func isDefaultModelDownloaded() async -> Bool
+    func hasDefaultModelArtifacts() async -> Bool
     func verifyDefaultModel() async throws -> URL
     func downloadDefaultModel(progress: @escaping InProcessModelDownloadProgressHandler) async throws -> URL
     func deleteDefaultModel() async throws
@@ -197,6 +198,11 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
         }
     }
 
+    public func hasDefaultModelArtifacts() async -> Bool {
+        let contents = (try? fileManager.contentsOfDirectory(atPath: modelDirectory().path)) ?? []
+        return !contents.isEmpty
+    }
+
     @discardableResult
     public func verifyDefaultModel() async throws -> URL {
         try Task.checkCancellation()
@@ -220,7 +226,7 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
 
         for (index, file) in manifest.files.enumerated() {
             try Task.checkCancellation()
-            if isFileVerified(file, in: directory) {
+            if try isFileVerified(file, in: directory) {
                 completedBytes += file.sizeBytes
                 await progress(progressValue(
                     completedBytes: min(completedBytes, manifest.totalBytes),
@@ -274,14 +280,13 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
             try Task.checkCancellation()
             let partialSize = fileSize(at: partial) ?? 0
             if partialSize >= file.sizeBytes {
-                if partialSize == file.sizeBytes, (try? verify(file: file, at: partial)) != nil {
+                if partialSize == file.sizeBytes, try isVerified(file: file, at: partial) {
                     try fileManager.moveItem(at: partial, to: destination)
                     return
                 }
                 try? fileManager.removeItem(at: partial)
             }
             let effectiveResumeOffset = fileSize(at: partial) ?? 0
-            let accumulator = DownloadProgressAccumulator(initialBytes: effectiveResumeOffset)
             await progress(progressValue(
                 completedBytes: completedBytesBeforeFile + effectiveResumeOffset,
                 completedFiles: completedFiles(before: file),
@@ -304,8 +309,8 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                         resumeOffset: effectiveResumeOffset
                     ),
                     to: partial
-                ) { delta in
-                    let fileBytes = min(accumulator.add(delta), file.sizeBytes)
+                ) { totalBytesWritten in
+                    let fileBytes = min(totalBytesWritten, file.sizeBytes)
                     updatesContinuation.yield(self.progressValue(
                         completedBytes: completedBytesBeforeFile + fileBytes,
                         completedFiles: self.completedFiles(before: file),
@@ -329,6 +334,8 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                 }
                 try fileManager.moveItem(at: partial, to: destination)
                 return
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 try? fileManager.removeItem(at: partial)
                 if attempts >= 2 {
@@ -364,8 +371,19 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
         }
     }
 
-    private func isFileVerified(_ file: InProcessLocalModelFile, in directory: URL) -> Bool {
-        (try? verify(file: file, in: directory)) != nil
+    private func isFileVerified(_ file: InProcessLocalModelFile, in directory: URL) throws -> Bool {
+        try isVerified(file: file, at: directory.appendingPathComponent(file.path))
+    }
+
+    private func isVerified(file: InProcessLocalModelFile, at url: URL) throws -> Bool {
+        do {
+            try verify(file: file, at: url)
+            return true
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return false
+        }
     }
 
     private func fileSize(at url: URL) -> UInt64? {
@@ -417,6 +435,7 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
 
         var hasher = SHA256()
         while let data = try handle.read(upToCount: 1024 * 1024), !data.isEmpty {
+            try Task.checkCancellation()
             hasher.update(data: data)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
@@ -431,7 +450,7 @@ public final class URLSessionInProcessModelDownloadTransport: NSObject, InProces
     public func download(
         _ request: InProcessModelDownloadRequest,
         to destination: URL,
-        onBytesReceived: @escaping @Sendable (UInt64) -> Void
+        onTotalBytesWritten: @escaping @Sendable (UInt64) -> Void
     ) async throws {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.timeoutInterval = 60
@@ -442,7 +461,7 @@ public final class URLSessionInProcessModelDownloadTransport: NSObject, InProces
         let delegate = StreamingDownloadDelegate(
             destination: destination,
             requestedResumeOffset: request.resumeOffset,
-            onBytesReceived: onBytesReceived
+            onTotalBytesWritten: onTotalBytesWritten
         )
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
         let task = session.dataTask(with: urlRequest)
@@ -454,22 +473,6 @@ public final class URLSessionInProcessModelDownloadTransport: NSObject, InProces
         } onCancel: {
             cancelBox.cancel()
         }
-    }
-}
-
-private final class DownloadProgressAccumulator: @unchecked Sendable {
-    private let lock = NSLock()
-    private var bytes: UInt64
-
-    init(initialBytes: UInt64) {
-        self.bytes = initialBytes
-    }
-
-    func add(_ delta: UInt64) -> UInt64 {
-        lock.lock()
-        defer { lock.unlock() }
-        bytes += delta
-        return bytes
     }
 }
 
@@ -488,20 +491,21 @@ private final class URLSessionTaskCancelBox: @unchecked Sendable {
 private final class StreamingDownloadDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let destination: URL
     private let requestedResumeOffset: UInt64
-    private let onBytesReceived: @Sendable (UInt64) -> Void
+    private let onTotalBytesWritten: @Sendable (UInt64) -> Void
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?
     private var fileHandle: FileHandle?
+    private var totalBytesWritten: UInt64 = 0
     private var isCompleted = false
 
     init(
         destination: URL,
         requestedResumeOffset: UInt64,
-        onBytesReceived: @escaping @Sendable (UInt64) -> Void
+        onTotalBytesWritten: @escaping @Sendable (UInt64) -> Void
     ) {
         self.destination = destination
         self.requestedResumeOffset = requestedResumeOffset
-        self.onBytesReceived = onBytesReceived
+        self.onTotalBytesWritten = onTotalBytesWritten
     }
 
     func start(task: URLSessionDataTask) async throws {
@@ -537,8 +541,10 @@ private final class StreamingDownloadDelegate: NSObject, URLSessionDataDelegate,
             let handle = try FileHandle(forWritingTo: destination)
             if requestedResumeOffset > 0, httpResponse.statusCode == 206 {
                 try handle.seekToEnd()
+                totalBytesWritten = requestedResumeOffset
             } else {
                 try handle.truncate(atOffset: 0)
+                totalBytesWritten = 0
             }
             fileHandle = handle
             completionHandler(.allow)
@@ -551,7 +557,8 @@ private final class StreamingDownloadDelegate: NSObject, URLSessionDataDelegate,
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         do {
             try fileHandle?.write(contentsOf: data)
-            onBytesReceived(UInt64(data.count))
+            totalBytesWritten += UInt64(data.count)
+            onTotalBytesWritten(totalBytesWritten)
         } catch {
             finish(throwing: error)
             dataTask.cancel()

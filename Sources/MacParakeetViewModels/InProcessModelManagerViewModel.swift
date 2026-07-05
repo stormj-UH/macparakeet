@@ -17,6 +17,7 @@ public final class InProcessModelManagerViewModel {
     public private(set) var state: State = .setUpNeeded
     public private(set) var progress: InProcessModelDownloadProgress?
     public private(set) var isModelDownloaded = false
+    public private(set) var hasModelArtifacts = false
     public private(set) var isWorking = false
 
     private var downloader: (any InProcessModelDownloading)?
@@ -74,6 +75,7 @@ public final class InProcessModelManagerViewModel {
             return
         }
         isModelDownloaded = await downloader.isDefaultModelDownloaded()
+        hasModelArtifacts = await downloader.hasDefaultModelArtifacts()
         state = isModelDownloaded ? .ready : .setUpNeeded
     }
 
@@ -117,6 +119,7 @@ public final class InProcessModelManagerViewModel {
                 await self?.updateDownloadProgress(progress)
             }
             isModelDownloaded = true
+            hasModelArtifacts = true
 
             state = .verifying
 
@@ -130,8 +133,10 @@ public final class InProcessModelManagerViewModel {
             onConfigurationChanged?()
         } catch is CancellationError {
             state = .failed(reason: "Local AI setup was canceled.", recoverable: true)
+            hasModelArtifacts = await downloader.hasDefaultModelArtifacts()
         } catch {
             state = .failed(reason: error.localizedDescription, recoverable: true)
+            hasModelArtifacts = await downloader.hasDefaultModelArtifacts()
         }
     }
 
@@ -143,6 +148,7 @@ public final class InProcessModelManagerViewModel {
         do {
             try await downloader.deleteDefaultModel()
             isModelDownloaded = false
+            hasModelArtifacts = false
             progress = nil
             if isLocalAISelected {
                 try configStore?.deleteConfig()

@@ -85,6 +85,88 @@ final class InProcessModelDownloaderTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
     }
 
+    func testProgressDoesNotOvercountWhenServerIgnoresResumeOffset() async throws {
+        let fixture = try makeFixture(files: ["model.safetensors": Data("abcdef".utf8)])
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true)
+        let partial = fixture.directory.appendingPathComponent(".model.safetensors.part")
+        try Data("abc".utf8).write(to: partial)
+        await fixture.transport.setIgnoresResumeOffset(true)
+        let downloader = InProcessModelDownloader(
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root,
+            transport: fixture.transport
+        )
+        let recorder = ProgressRecorder()
+
+        _ = try await downloader.downloadDefaultModel { progress in
+            await recorder.append(progress.completedBytes)
+        }
+
+        let validValues: Set<UInt64> = [0, 2, 3, 4, 6]
+        let recorded = await recorder.values()
+        XCTAssertTrue(
+            recorded.allSatisfy { validValues.contains($0) },
+            "Progress double-counted the discarded resume offset: \(recorded)"
+        )
+        XCTAssertEqual(
+            try Data(contentsOf: fixture.directory.appendingPathComponent("model.safetensors")),
+            Data("abcdef".utf8)
+        )
+    }
+
+    func testHasDefaultModelArtifactsDetectsPartialFiles() async throws {
+        let fixture = try makeFixture()
+        let downloader = InProcessModelDownloader(
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root,
+            transport: fixture.transport
+        )
+
+        let beforeAnyFiles = await downloader.hasDefaultModelArtifacts()
+        XCTAssertFalse(beforeAnyFiles)
+
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true)
+        let partial = fixture.directory.appendingPathComponent(".model.safetensors.part")
+        try Data("abc".utf8).write(to: partial)
+
+        let downloaded = await downloader.isDefaultModelDownloaded()
+        XCTAssertFalse(downloaded)
+        let withPartial = await downloader.hasDefaultModelArtifacts()
+        XCTAssertTrue(withPartial)
+
+        try await downloader.deleteDefaultModel()
+        let afterDelete = await downloader.hasDefaultModelArtifacts()
+        XCTAssertFalse(afterDelete)
+    }
+
+    func testCanceledDownloadThrowsCancellationAndPreservesCompletePartial() async throws {
+        let fixture = try makeFixture(files: ["model.safetensors": Data("abcdef".utf8)])
+        try FileManager.default.createDirectory(at: fixture.directory, withIntermediateDirectories: true)
+        let partial = fixture.directory.appendingPathComponent(".model.safetensors.part")
+        try Data("abcdef".utf8).write(to: partial)
+        let downloader = InProcessModelDownloader(
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root,
+            transport: fixture.transport
+        )
+
+        let task = Task {
+            _ = try await downloader.downloadDefaultModel()
+        }
+        task.cancel()
+
+        do {
+            try await task.value
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        let destination = fixture.directory.appendingPathComponent("model.safetensors")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: partial.path)
+                || FileManager.default.fileExists(atPath: destination.path)
+        )
+    }
+
     func testIsDefaultModelDownloadedChecksPresenceAndSize() async throws {
         let fixture = try makeFixture()
         try writeFixtureFiles(fixture)
@@ -167,6 +249,18 @@ final class InProcessModelDownloaderTests: XCTestCase {
     }
 }
 
+private actor ProgressRecorder {
+    private var recorded: [UInt64] = []
+
+    func append(_ value: UInt64) {
+        recorded.append(value)
+    }
+
+    func values() -> [UInt64] {
+        recorded
+    }
+}
+
 private struct DownloaderFixture {
     let root: URL
     let directory: URL
@@ -178,33 +272,45 @@ private struct DownloaderFixture {
 private actor MockInProcessModelDownloadTransport: InProcessModelDownloadTransport {
     private let files: [URL: Data]
     private var capturedRequests: [InProcessModelDownloadRequest] = []
+    private var ignoresResumeOffset = false
 
     init(files: [URL: Data]) {
         self.files = files
     }
 
+    func setIgnoresResumeOffset(_ value: Bool) {
+        ignoresResumeOffset = value
+    }
+
     func download(
         _ request: InProcessModelDownloadRequest,
         to destination: URL,
-        onBytesReceived: @escaping @Sendable (UInt64) -> Void
+        onTotalBytesWritten: @escaping @Sendable (UInt64) -> Void
     ) async throws {
         capturedRequests.append(request)
         guard let data = files[request.url] else {
             throw URLError(.badURL)
         }
-        if !FileManager.default.fileExists(atPath: destination.path) || request.resumeOffset == 0 {
+        let effectiveOffset = ignoresResumeOffset ? 0 : request.resumeOffset
+        if !FileManager.default.fileExists(atPath: destination.path) || effectiveOffset == 0 {
             FileManager.default.createFile(atPath: destination.path, contents: nil)
         }
         let handle = try FileHandle(forWritingTo: destination)
         defer { try? handle.close() }
-        if request.resumeOffset > 0 {
+        if effectiveOffset > 0 {
             try handle.seekToEnd()
         } else {
             try handle.truncate(atOffset: 0)
         }
-        let remaining = data.dropFirst(Int(request.resumeOffset))
-        handle.write(Data(remaining))
-        onBytesReceived(UInt64(remaining.count))
+        var totalBytesWritten = effectiveOffset
+        let remaining = Data(data.dropFirst(Int(effectiveOffset)))
+        for chunkStart in stride(from: 0, to: remaining.count, by: 2) {
+            let chunk = remaining[chunkStart..<min(chunkStart + 2, remaining.count)]
+            try handle.write(contentsOf: chunk)
+            totalBytesWritten += UInt64(chunk.count)
+            onTotalBytesWritten(totalBytesWritten)
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
     }
 
     func requests() -> [InProcessModelDownloadRequest] {

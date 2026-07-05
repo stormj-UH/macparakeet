@@ -126,6 +126,27 @@ final class InProcessModelManagerViewModelTests: XCTestCase {
         XCTAssertNil(configStore.config)
     }
 
+    func testRefreshSurfacesPartialArtifactsAndDeleteClearsThem() async {
+        let downloader = FakeInProcessModelDownloader(isDownloaded: false, hasArtifacts: true)
+        let viewModel = InProcessModelManagerViewModel()
+        viewModel.configure(
+            downloader: downloader,
+            configStore: MockLLMConfigStore(),
+            llmClient: MockLLMClient(),
+            physicalMemoryBytes: 32 * 1024 * 1024 * 1024
+        )
+
+        await viewModel.refresh()
+
+        XCTAssertFalse(viewModel.isModelDownloaded)
+        XCTAssertTrue(viewModel.hasModelArtifacts)
+
+        await viewModel.deleteModel()
+
+        XCTAssertFalse(viewModel.hasModelArtifacts)
+        XCTAssertEqual(viewModel.state, .setUpNeeded)
+    }
+
     func testDeleteModelClearsSavedLocalProvider() async {
         let downloader = FakeInProcessModelDownloader(isDownloaded: true)
         let configStore = MockLLMConfigStore()
@@ -162,6 +183,10 @@ private actor BlockingInProcessModelDownloader: InProcessModelDownloading {
         false
     }
 
+    func hasDefaultModelArtifacts() async -> Bool {
+        downloadStarted
+    }
+
     func verifyDefaultModel() async throws -> URL {
         defaultModelDirectory()
     }
@@ -185,12 +210,14 @@ private actor BlockingInProcessModelDownloader: InProcessModelDownloading {
 
 private actor FakeInProcessModelDownloader: InProcessModelDownloading {
     private var isDownloaded: Bool
+    private var hasArtifacts: Bool
     private var downloadCalls = 0
     private var verifyCalls = 0
     private var deleteCalls = 0
 
-    init(isDownloaded: Bool = false) {
+    init(isDownloaded: Bool = false, hasArtifacts: Bool? = nil) {
         self.isDownloaded = isDownloaded
+        self.hasArtifacts = hasArtifacts ?? isDownloaded
     }
 
     nonisolated func defaultModelDirectory() -> URL {
@@ -200,6 +227,10 @@ private actor FakeInProcessModelDownloader: InProcessModelDownloading {
 
     func isDefaultModelDownloaded() async -> Bool {
         isDownloaded
+    }
+
+    func hasDefaultModelArtifacts() async -> Bool {
+        hasArtifacts
     }
 
     func verifyDefaultModel() async throws -> URL {
@@ -213,6 +244,7 @@ private actor FakeInProcessModelDownloader: InProcessModelDownloading {
     ) async throws -> URL {
         downloadCalls += 1
         isDownloaded = true
+        hasArtifacts = true
         await progress(InProcessModelDownloadProgress(
             completedBytes: 1,
             totalBytes: 1,
@@ -226,6 +258,7 @@ private actor FakeInProcessModelDownloader: InProcessModelDownloading {
     func deleteDefaultModel() async throws {
         deleteCalls += 1
         isDownloaded = false
+        hasArtifacts = false
     }
 
     func downloadCallCount() -> Int {
