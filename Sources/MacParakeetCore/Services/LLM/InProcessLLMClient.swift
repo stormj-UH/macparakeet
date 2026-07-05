@@ -15,7 +15,7 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
     private let chunkCharacterThreshold: Int
     private let chunkCharacterLimit: Int
     private let idleUnloadDelayNanoseconds: UInt64
-    private let idleUnloadScheduler = LocalLLMIdleUnloadScheduler()
+    private let lifetimeCoordinator = LocalLLMLifetimeCoordinator()
     private let logger = Logger(subsystem: "com.macparakeet.core", category: "InProcessLLMClient")
 
     public init(
@@ -82,8 +82,21 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
     public func testConnection(context: LLMExecutionContext) async throws {
         try Task.checkCancellation()
-        try await loadRuntime(for: context.providerConfig)
-        await runtime.unload()
+        await lifetimeCoordinator.beginGeneration()
+        do {
+            try Task.checkCancellation()
+            try await loadRuntime(for: context.providerConfig)
+            await lifetimeCoordinator.endGeneration(
+                runtime: runtime,
+                delayNanoseconds: 0
+            )
+        } catch {
+            await lifetimeCoordinator.endGeneration(
+                runtime: runtime,
+                delayNanoseconds: 0
+            )
+            throw error
+        }
     }
 
     public func listModels(context: LLMExecutionContext) async throws -> [String] {
@@ -113,10 +126,12 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         }
 
         try Task.checkCancellation()
-        await idleUnloadScheduler.cancelPendingUnload()
-        try await loadRuntime(for: context.providerConfig)
+        await lifetimeCoordinator.beginGeneration()
 
         do {
+            try Task.checkCancellation()
+            try await loadRuntime(for: context.providerConfig)
+
             let response: CollectedLocalLLMResponse
             if shouldChunk(messages) {
                 response = try await generateChunked(
@@ -133,13 +148,13 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
             }
 
             log(metrics: response.metrics, inputCharacters: Self.inputCharacterCount(messages))
-            await idleUnloadScheduler.scheduleUnload(
+            await lifetimeCoordinator.endGeneration(
                 runtime: runtime,
                 delayNanoseconds: idleUnloadDelayNanoseconds
             )
             return response
         } catch {
-            await idleUnloadScheduler.scheduleUnload(
+            await lifetimeCoordinator.endGeneration(
                 runtime: runtime,
                 delayNanoseconds: idleUnloadDelayNanoseconds
             )
@@ -295,6 +310,7 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         partials: [String]
     ) -> [ChatMessage] {
         let systemMessages = originalMessages.filter { $0.role == .system }
+        let originalConversationContext = compactConversationContext(originalMessages)
         let combined = partials.enumerated()
             .map { "Chunk \($0.offset + 1):\n\($0.element)" }
             .joined(separator: "\n\n")
@@ -304,10 +320,44 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
                 content: """
                 Combine the chunk results into one final answer for the original request. Preserve source facts exactly, remove duplication, and do not add unstated details.
 
+                Original conversation context, including user and assistant turns:
+                \(originalConversationContext)
+
+                Chunk results:
                 \(combined)
                 """
             ),
         ]
+    }
+
+    private static func compactConversationContext(
+        _ messages: [ChatMessage],
+        maxCharacters: Int = 6_000
+    ) -> String {
+        let context = messages
+            .filter { $0.role != .system }
+            .map { "\($0.role.rawValue.uppercased()): \($0.modelContent)" }
+            .joined(separator: "\n\n")
+
+        guard !context.isEmpty else { return "(no user or assistant context)" }
+        return middleTruncated(context, maxCharacters: maxCharacters)
+    }
+
+    private static func middleTruncated(_ text: String, maxCharacters: Int) -> String {
+        guard text.count > maxCharacters else { return text }
+
+        let boundedLimit = max(1, maxCharacters)
+        let headCount = boundedLimit / 2
+        let tailCount = boundedLimit - headCount
+        let headEnd = text.index(text.startIndex, offsetBy: headCount)
+        let tailStart = text.index(text.endIndex, offsetBy: -tailCount)
+        return """
+        \(text[..<headEnd])
+
+        [...conversation truncated for local model memory...]
+
+        \(text[tailStart...])
+        """
     }
 
     private static func merge(
@@ -331,15 +381,40 @@ private struct CollectedLocalLLMResponse: Sendable {
     let metrics: LLMGenerationMetrics?
 }
 
-private actor LocalLLMIdleUnloadScheduler {
+private actor LocalLLMLifetimeCoordinator {
     private var unloadTask: Task<Void, Never>?
+    private var generationActive = false
+    private var waitingGenerations: [CheckedContinuation<Void, Never>] = []
 
-    func cancelPendingUnload() {
+    func beginGeneration() async {
+        if generationActive {
+            await withCheckedContinuation { continuation in
+                waitingGenerations.append(continuation)
+            }
+            return
+        }
+
+        generationActive = true
+        cancelPendingUnload()
+    }
+
+    func endGeneration(runtime: any LocalLLMRuntime, delayNanoseconds: UInt64) {
+        if !waitingGenerations.isEmpty {
+            let next = waitingGenerations.removeFirst()
+            next.resume()
+            return
+        }
+
+        generationActive = false
+        scheduleUnload(runtime: runtime, delayNanoseconds: delayNanoseconds)
+    }
+
+    private func cancelPendingUnload() {
         unloadTask?.cancel()
         unloadTask = nil
     }
 
-    func scheduleUnload(runtime: any LocalLLMRuntime, delayNanoseconds: UInt64) {
+    private func scheduleUnload(runtime: any LocalLLMRuntime, delayNanoseconds: UInt64) {
         unloadTask?.cancel()
         unloadTask = Task {
             guard delayNanoseconds > 0 else {

@@ -12,28 +12,40 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
     private var session: ChatSession?
     private var loadedModel: LocalLLMModelReference?
     private var latestMetrics: LLMGenerationMetrics?
+    private var generationInProgress = false
+    private var unloadAfterGeneration = false
 
     public init() {}
 
     public func load(model: LocalLLMModelReference) async throws {
         try Task.checkCancellation()
+        if generationInProgress {
+            guard loadedModel == model, session != nil else {
+                throw LLMError.providerError("Cannot switch local MLX models while generation is in progress.")
+            }
+            return
+        }
+
         if loadedModel == model, session != nil {
             return
         }
 
-        session = nil
-        latestMetrics = nil
+        clearLoadedState()
 
         let container = try await loadModelContainer(from: model.directory)
         session = ChatSession(container)
         loadedModel = model
+        unloadAfterGeneration = false
         logger.info("Loaded local MLX model \(model.modelName, privacy: .public)")
     }
 
     public func unload() async {
-        session = nil
-        loadedModel = nil
-        latestMetrics = nil
+        if generationInProgress {
+            unloadAfterGeneration = true
+            return
+        }
+
+        clearLoadedState()
         logger.info("Unloaded local MLX model")
     }
 
@@ -44,7 +56,12 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
         guard session != nil else {
             throw LLMError.modelNotFound("Local MLX model is not loaded.")
         }
+        guard !generationInProgress else {
+            throw LLMError.providerError("Local MLX generation is already in progress.")
+        }
 
+        generationInProgress = true
+        unloadAfterGeneration = false
         return AsyncThrowingStream { continuation in
             let task = Task {
                 await self.generate(
@@ -68,6 +85,10 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
         options: ChatCompletionOptions,
         continuation: AsyncThrowingStream<LocalLLMRuntimeEvent, Error>.Continuation
     ) async {
+        defer {
+            finishGeneration()
+        }
+
         do {
             guard let session else {
                 throw LLMError.modelNotFound("Local MLX model is not loaded.")
@@ -110,6 +131,21 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
         } catch {
             continuation.finish(throwing: error)
         }
+    }
+
+    private func finishGeneration() {
+        generationInProgress = false
+        guard unloadAfterGeneration else { return }
+
+        unloadAfterGeneration = false
+        clearLoadedState()
+        logger.info("Unloaded local MLX model")
+    }
+
+    private func clearLoadedState() {
+        session = nil
+        loadedModel = nil
+        latestMetrics = nil
     }
 
     private static func prompt(from messages: [ChatMessage]) -> String {

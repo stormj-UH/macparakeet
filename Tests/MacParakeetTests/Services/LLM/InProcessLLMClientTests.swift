@@ -66,6 +66,78 @@ final class InProcessLLMClientTests: XCTestCase {
         XCTAssertTrue(requestContents.last?.contains("Combine the chunk results") == true)
     }
 
+    func testLongInputReducePromptPreservesConversationContext() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(eventPlans: [
+            [.text("map-1")],
+            [.text("map-2")],
+            [.text("final")],
+        ])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            chunkCharacterThreshold: 10,
+            chunkCharacterLimit: 160,
+            idleUnloadDelaySeconds: 60
+        )
+
+        _ = try await client.chatCompletion(
+            messages: [
+                ChatMessage(role: .system, content: "Be faithful."),
+                ChatMessage(role: .user, content: "Earlier user asked for Alpha."),
+                ChatMessage(role: .assistant, content: "Earlier assistant answered with Alpha."),
+                ChatMessage(role: .user, content: "Final user asks for Beta. " + String(repeating: "b", count: 220)),
+            ],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "chunk-context-test")),
+            options: .default
+        )
+
+        let requestContents = await runtime.requestContents()
+        let reducePrompt = try XCTUnwrap(requestContents.last)
+        XCTAssertTrue(reducePrompt.contains("Original conversation context"))
+        XCTAssertTrue(reducePrompt.contains("Earlier user asked for Alpha."))
+        XCTAssertTrue(reducePrompt.contains("Earlier assistant answered with Alpha."))
+        XCTAssertTrue(reducePrompt.contains("Final user asks for Beta."))
+    }
+
+    func testQueuedGenerationDoesNotUnloadRuntimeBetweenRequests() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(
+            eventPlans: [
+                [.text("first")],
+                [.text("second")],
+            ],
+            delayNanoseconds: 50_000_000
+        )
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            idleUnloadDelaySeconds: 0
+        )
+
+        async let first = client.chatCompletion(
+            messages: [ChatMessage(role: .user, content: "First")],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "queued-test")),
+            options: .default
+        )
+        try await Task.sleep(nanoseconds: 10_000_000)
+        async let second = client.chatCompletion(
+            messages: [ChatMessage(role: .user, content: "Second")],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "queued-test")),
+            options: .default
+        )
+
+        let firstResponse = try await first
+        let secondResponse = try await second
+        XCTAssertEqual([firstResponse.content, secondResponse.content], ["first", "second"])
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let requestContents = await runtime.requestContents()
+        let unloadCount = await runtime.unloadCallCount()
+        XCTAssertEqual(requestContents, ["First", "Second"])
+        XCTAssertEqual(unloadCount, 1)
+    }
+
     func testStreamingYieldsRuntimeChunks() async throws {
         let modelDirectory = temporaryModelDirectory()
         let runtime = FakeLocalLLMRuntime(eventPlans: [[
