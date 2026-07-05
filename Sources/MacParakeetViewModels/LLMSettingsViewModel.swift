@@ -636,6 +636,7 @@ public final class LLMSettingsViewModel {
             }
 
             saveState = .saved
+            inProcessModelManager.refreshSelectionState()
             onConfigurationChanged?()
         } catch {
             saveState = .error(error.localizedDescription)
@@ -720,6 +721,7 @@ public final class LLMSettingsViewModel {
         }
         connectionTestState = .idle
         saveState = .idle
+        inProcessModelManager.refreshSelectionState()
         onConfigurationChanged?()
     }
 

@@ -43,6 +43,7 @@ public final class InProcessModelManagerViewModel {
         self.llmClient = llmClient
         self.physicalMemoryBytes = physicalMemoryBytes
         self.onConfigurationChanged = onConfigurationChanged
+        refreshSelectionState()
     }
 
     public var meetsMemoryRequirement: Bool {
@@ -64,13 +65,16 @@ public final class InProcessModelManagerViewModel {
         )
     }
 
-    public var isLocalAISelected: Bool {
-        guard let config = try? configStore?.loadConfig() else { return false }
-        return config.id == .inProcessLocal
+    public private(set) var isLocalAISelected = false
+
+    public func refreshSelectionState() {
+        let config = try? configStore?.loadConfig()
+        isLocalAISelected = config?.id == .inProcessLocal
     }
 
     public func refresh() async {
         guard setupTask == nil else { return }
+        refreshSelectionState()
         guard let downloader else {
             state = .setUpNeeded
             return
@@ -130,6 +134,7 @@ public final class InProcessModelManagerViewModel {
             )
             try await llmClient.testConnection(context: LLMExecutionContext(providerConfig: config))
             try configStore.saveConfig(config)
+            refreshSelectionState()
 
             state = .ready
             onConfigurationChanged?()
@@ -152,8 +157,10 @@ public final class InProcessModelManagerViewModel {
             isModelDownloaded = false
             hasModelArtifacts = false
             progress = nil
+            refreshSelectionState()
             if isLocalAISelected {
                 try configStore?.deleteConfig()
+                refreshSelectionState()
                 onConfigurationChanged?()
             }
             state = .setUpNeeded
