@@ -212,7 +212,7 @@ public enum LLMProviderID: String, Codable, Sendable, CaseIterable {
                 modelListEndpoint: .none,
                 defaultModelName: "mlx-community/Qwen3-4B-Instruct-2507-DDWQ",
                 fallbackModels: [
-                    "mlx-community/Qwen3-4B-Instruct-2507-DDWQ",
+                    "mlx-community/Qwen3-4B-Instruct-2507-DDWQ"
                 ]
             )
         }
@@ -312,7 +312,7 @@ public struct LLMProviderConfig: Codable, Sendable, Equatable {
         baseURL = try container.decode(URL.self, forKey: .baseURL)
         modelName = try container.decode(String.self, forKey: .modelName)
         isLocal = try container.decode(Bool.self, forKey: .isLocal)
-        apiKey = nil // Excluded from Codable — hydrated from Keychain separately
+        apiKey = nil  // Excluded from Codable — hydrated from Keychain separately
     }
 
     // MARK: - Factory Methods

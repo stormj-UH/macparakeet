@@ -19,7 +19,8 @@ public enum AppPaths {
             return override
         }
         #endif
-        let path = FileManager.default
+        let path =
+            FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first?
             .path
@@ -73,7 +74,8 @@ public enum AppPaths {
         }
         #endif
         if let raw = defaults.string(forKey: meetingArtifactsFolderKey),
-           let path = normalizedMeetingArtifactsFolder(raw) {
+            let path = normalizedMeetingArtifactsFolder(raw)
+        {
             return path
         }
         return defaultMeetingRecordingsDir(environment: environment)
@@ -98,7 +100,8 @@ public enum AppPaths {
             return "\(override)/logs"
         }
         #endif
-        let path = FileManager.default
+        let path =
+            FileManager.default
             .urls(for: .libraryDirectory, in: .userDomainMask)
             .first?
             .path
@@ -152,7 +155,10 @@ public enum AppPaths {
     /// Ensure all required directories exist
     public static func ensureDirectories() throws {
         let fm = FileManager.default
-        for dir in [appSupportDir, dictationsDir, youtubeDownloadsDir, meetingRecordingsDir, binDir, whisperModelsDir, thumbnailsDir, logsDir, tempDir] {
+        for dir in [
+            appSupportDir, dictationsDir, youtubeDownloadsDir, meetingRecordingsDir, binDir, whisperModelsDir,
+            thumbnailsDir, logsDir, tempDir,
+        ] {
             if !fm.fileExists(atPath: dir) {
                 try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
             }
@@ -169,8 +175,9 @@ public enum AppPaths {
 
     #if DEBUG
     private static func debugAppStateDir(environment: [String: String]) -> String? {
-        guard let raw = environment[debugAppStateDirEnvironmentKey]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
+        guard
+            let raw = environment[debugAppStateDirEnvironmentKey]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
             !raw.isEmpty
         else {
             return nil

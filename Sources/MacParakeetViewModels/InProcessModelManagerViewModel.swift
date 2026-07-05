@@ -105,7 +105,8 @@ public final class InProcessModelManagerViewModel {
     public func enableLocalAI() async {
         guard meetsMemoryRequirement else {
             state = .failed(
-                reason: "Local AI needs \(minimumMemoryDescription). Use a cloud provider or bring your own local server instead.",
+                reason:
+                    "Local AI needs \(minimumMemoryDescription). Use a cloud provider or bring your own local server instead.",
                 recoverable: false
             )
             return

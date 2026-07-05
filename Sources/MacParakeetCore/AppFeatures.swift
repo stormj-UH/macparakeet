@@ -143,9 +143,10 @@ public enum AppFeatures {
         defaults: UserDefaults = .standard,
         arguments: [String] = ProcessInfo.processInfo.arguments
     ) -> Bool {
-        inProcessLocalLLMEnabled || inProcessLocalLLMDeveloperOverrideEnabled(
-            defaults: defaults,
-            arguments: arguments
-        )
+        inProcessLocalLLMEnabled
+            || inProcessLocalLLMDeveloperOverrideEnabled(
+                defaults: defaults,
+                arguments: arguments
+            )
     }
 }

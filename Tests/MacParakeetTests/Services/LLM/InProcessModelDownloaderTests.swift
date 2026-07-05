@@ -286,12 +286,14 @@ final class InProcessModelDownloaderTests: XCTestCase {
             }
         )
         let directory = InProcessLocalModelCatalog.modelDirectory(for: manifest.modelID, cacheRoot: root)
-        let urlFiles = Dictionary(uniqueKeysWithValues: files.map { path, data in
-            (
-                URL(string: "https://huggingface.co/\(manifest.repositoryID)/resolve/\(manifest.revision)/\(path)")!,
-                data
-            )
-        })
+        let urlFiles = Dictionary(
+            uniqueKeysWithValues: files.map { path, data in
+                (
+                    URL(
+                        string: "https://huggingface.co/\(manifest.repositoryID)/resolve/\(manifest.revision)/\(path)")!,
+                    data
+                )
+            })
         return DownloaderFixture(
             root: root,
             directory: directory,

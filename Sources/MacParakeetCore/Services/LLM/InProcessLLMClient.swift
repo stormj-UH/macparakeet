@@ -105,7 +105,8 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
     public static func defaultModelDirectory(for config: LLMProviderConfig) throws -> URL {
         if let rawPath = ProcessInfo.processInfo.environment[modelDirectoryEnvironmentVariable],
-            !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
             return URL(fileURLWithPath: rawPath, isDirectory: true)
         }
 
@@ -323,7 +324,8 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         var cursor = text.startIndex
         while cursor < text.endIndex {
             let hardEnd = text.index(cursor, offsetBy: maxCharacters, limitedBy: text.endIndex) ?? text.endIndex
-            let end = hardEnd == text.endIndex
+            let end =
+                hardEnd == text.endIndex
                 ? hardEnd
                 : preferredChunkBoundary(in: cursor..<hardEnd, text: text) ?? hardEnd
             let chunk = String(text[cursor..<end]).trimmingCharacters(in: .whitespacesAndNewlines)

@@ -273,13 +273,14 @@ private actor FakeInProcessModelDownloader: InProcessModelDownloading {
         downloadCalls += 1
         isDownloaded = true
         hasArtifacts = true
-        await progress(InProcessModelDownloadProgress(
-            completedBytes: 1,
-            totalBytes: 1,
-            completedFiles: 1,
-            totalFiles: 1,
-            currentFile: "model.safetensors"
-        ))
+        await progress(
+            InProcessModelDownloadProgress(
+                completedBytes: 1,
+                totalBytes: 1,
+                completedFiles: 1,
+                totalFiles: 1,
+                currentFile: "model.safetensors"
+            ))
         return defaultModelDirectory()
     }
 

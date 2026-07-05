@@ -57,15 +57,19 @@ final class LLMProviderDescriptorTests: XCTestCase {
 
     func testFactoryDefaultsComeFromDescriptors() {
         XCTAssertEqual(LLMProviderConfig.openai(apiKey: "sk").modelName, LLMProviderID.openai.defaultModelName)
-        XCTAssertEqual(LLMProviderConfig.openai(apiKey: "sk").baseURL.absoluteString, LLMProviderID.openai.defaultBaseURL)
+        XCTAssertEqual(
+            LLMProviderConfig.openai(apiKey: "sk").baseURL.absoluteString, LLMProviderID.openai.defaultBaseURL)
         XCTAssertEqual(LLMProviderConfig.gemini(apiKey: "key").modelName, LLMProviderID.gemini.defaultModelName)
-        XCTAssertEqual(LLMProviderConfig.gemini(apiKey: "key").baseURL.absoluteString, LLMProviderID.gemini.defaultBaseURL)
+        XCTAssertEqual(
+            LLMProviderConfig.gemini(apiKey: "key").baseURL.absoluteString, LLMProviderID.gemini.defaultBaseURL)
         XCTAssertEqual(LLMProviderConfig.openrouter(apiKey: "key").modelName, LLMProviderID.openrouter.defaultModelName)
-        XCTAssertEqual(LLMProviderConfig.openrouter(apiKey: "key").baseURL.absoluteString, LLMProviderID.openrouter.defaultBaseURL)
+        XCTAssertEqual(
+            LLMProviderConfig.openrouter(apiKey: "key").baseURL.absoluteString, LLMProviderID.openrouter.defaultBaseURL)
         XCTAssertEqual(LLMProviderConfig.ollama().modelName, LLMProviderID.ollama.defaultModelName)
         XCTAssertEqual(LLMProviderConfig.ollama().baseURL.absoluteString, LLMProviderID.ollama.defaultBaseURL)
         XCTAssertEqual(LLMProviderConfig.inProcessLocal().modelName, LLMProviderID.inProcessLocal.defaultModelName)
-        XCTAssertEqual(LLMProviderConfig.inProcessLocal().baseURL.absoluteString, LLMProviderID.inProcessLocal.defaultBaseURL)
+        XCTAssertEqual(
+            LLMProviderConfig.inProcessLocal().baseURL.absoluteString, LLMProviderID.inProcessLocal.defaultBaseURL)
     }
 
     func testInProcessLocalProviderIsHiddenWhileFeatureFlagIsOff() {
@@ -83,7 +87,8 @@ final class LLMProviderDescriptorTests: XCTestCase {
                 .localCLI,
             ]
         )
-        XCTAssertFalse(LLMProviderID.userSelectableProviderIDs(inProcessLocalLLMVisible: false).contains(.inProcessLocal))
+        XCTAssertFalse(
+            LLMProviderID.userSelectableProviderIDs(inProcessLocalLLMVisible: false).contains(.inProcessLocal))
     }
 
     func testDeveloperOverrideCanExposeInProcessLocalProviderWithoutFlippingPublicFlag() {
@@ -105,9 +110,10 @@ final class LLMProviderDescriptorTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         XCTAssertFalse(AppFeatures.inProcessLocalLLMEnabled)
-        XCTAssertTrue(AppFeatures.inProcessLocalLLMDeveloperOverrideEnabled(
-            defaults: defaults,
-            arguments: [AppFeatures.inProcessLocalLLMDeveloperLaunchArgument]
-        ))
+        XCTAssertTrue(
+            AppFeatures.inProcessLocalLLMDeveloperOverrideEnabled(
+                defaults: defaults,
+                arguments: [AppFeatures.inProcessLocalLLMDeveloperLaunchArgument]
+            ))
     }
 }
