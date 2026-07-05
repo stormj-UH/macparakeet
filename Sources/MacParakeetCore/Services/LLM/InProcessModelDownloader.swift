@@ -509,10 +509,11 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
             try Task.checkCancellation()
             if try isFileVerified(file, in: directory) {
                 completedBytes += file.sizeBytes
-                await progress(progressValue(
-                    completedBytes: min(completedBytes, manifest.totalBytes),
-                    completedFiles: index + 1
-                ))
+                await progress(
+                    progressValue(
+                        completedBytes: min(completedBytes, manifest.totalBytes),
+                        completedFiles: index + 1
+                    ))
                 continue
             }
 
@@ -521,12 +522,14 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                 in: directory,
                 fileManager: fileManager
             )
-            try await download(file: file, to: destination, completedBytesBeforeFile: completedBytes, progress: progress)
+            try await download(
+                file: file, to: destination, completedBytesBeforeFile: completedBytes, progress: progress)
             completedBytes += file.sizeBytes
-            await progress(progressValue(
-                completedBytes: min(completedBytes, manifest.totalBytes),
-                completedFiles: index + 1
-            ))
+            await progress(
+                progressValue(
+                    completedBytes: min(completedBytes, manifest.totalBytes),
+                    completedFiles: index + 1
+                ))
         }
 
         try InProcessLocalModelCatalog.writeVerificationMarker(
@@ -583,7 +586,8 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                 }
                 try? fileManager.removeItem(at: partial)
             }
-            let effectiveResumeOffset = try InProcessLocalModelCatalog.fileSize(at: partial, fileManager: fileManager) ?? 0
+            let effectiveResumeOffset =
+                try InProcessLocalModelCatalog.fileSize(at: partial, fileManager: fileManager) ?? 0
 
             let (updates, updatesContinuation) = AsyncStream.makeStream(
                 of: InProcessModelDownloadProgress.self,
@@ -603,11 +607,12 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                     to: partial
                 ) { totalBytesWritten in
                     let fileBytes = min(totalBytesWritten, file.sizeBytes)
-                    updatesContinuation.yield(self.progressValue(
-                        completedBytes: completedBytesBeforeFile + fileBytes,
-                        completedFiles: self.completedFiles(before: file),
-                        currentFile: file.path
-                    ))
+                    updatesContinuation.yield(
+                        self.progressValue(
+                            completedBytes: completedBytesBeforeFile + fileBytes,
+                            completedFiles: self.completedFiles(before: file),
+                            currentFile: file.path
+                        ))
                 }
                 updatesContinuation.finish()
                 await progressForwarder.value

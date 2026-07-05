@@ -104,7 +104,8 @@ final class InProcessModelDownloaderTests: XCTestCase {
 
         let recorded = await recorder.values()
         XCTAssertEqual(recorded, recorded.sorted(), "Progress moved backward: \(recorded)")
-        XCTAssertFalse(recorded.contains(3), "Discarded resume offset should not be emitted before response: \(recorded)")
+        XCTAssertFalse(
+            recorded.contains(3), "Discarded resume offset should not be emitted before response: \(recorded)")
         XCTAssertTrue(recorded.allSatisfy { $0 <= 6 }, "Progress overcounted the file size: \(recorded)")
         XCTAssertEqual(
             try Data(contentsOf: fixture.directory.appendingPathComponent("model.safetensors")),
@@ -178,7 +179,8 @@ final class InProcessModelDownloaderTests: XCTestCase {
         XCTAssertTrue(downloaded)
 
         let corruptFile = fixture.directory.appendingPathComponent("config.json")
-        let originalModifiedAt = try FileManager.default
+        let originalModifiedAt =
+            try FileManager.default
             .attributesOfItem(atPath: corruptFile.path)[.modificationDate] as? Date
         try Data(repeating: 0x78, count: fixture.files["config.json"]!.count).write(to: corruptFile)
         if let originalModifiedAt {
@@ -233,21 +235,26 @@ final class InProcessModelDownloaderTests: XCTestCase {
     }
 
     func testRedirectPolicyAllowsOnlyTrustedHTTPSHosts() {
-        XCTAssertTrue(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
-            URL(string: "https://huggingface.co/example/model")!
-        ))
-        XCTAssertTrue(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
-            URL(string: "https://cdn-lfs.huggingface.co/example/model")!
-        ))
-        XCTAssertTrue(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
-            URL(string: "https://cas-bridge.xethub.hf.co/example/model")!
-        ))
-        XCTAssertFalse(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
-            URL(string: "http://huggingface.co/example/model")!
-        ))
-        XCTAssertFalse(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
-            URL(string: "https://example.com/example/model")!
-        ))
+        XCTAssertTrue(
+            URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+                URL(string: "https://huggingface.co/example/model")!
+            ))
+        XCTAssertTrue(
+            URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+                URL(string: "https://cdn-lfs.huggingface.co/example/model")!
+            ))
+        XCTAssertTrue(
+            URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+                URL(string: "https://cas-bridge.xethub.hf.co/example/model")!
+            ))
+        XCTAssertFalse(
+            URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+                URL(string: "http://huggingface.co/example/model")!
+            ))
+        XCTAssertFalse(
+            URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+                URL(string: "https://example.com/example/model")!
+            ))
     }
 
     func testDeleteRemovesModelDirectory() async throws {
