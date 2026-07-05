@@ -100,9 +100,8 @@ public final class InProcessModelManagerViewModel {
         do {
             state = .downloading(progress: 0)
             progress = nil
-            let progressSink = InProcessModelProgressSink(viewModel: self)
-            _ = try await downloader.downloadDefaultModel { progress in
-                await progressSink.update(progress)
+            _ = try await downloader.downloadDefaultModel { [weak self] progress in
+                await self?.updateDownloadProgress(progress)
             }
 
             state = .verifying
@@ -147,18 +146,5 @@ public final class InProcessModelManagerViewModel {
         guard case .downloading = state else { return }
         self.progress = progress
         state = .downloading(progress: progress.fractionCompleted)
-    }
-}
-
-private final class InProcessModelProgressSink: @unchecked Sendable {
-    weak var viewModel: InProcessModelManagerViewModel?
-
-    init(viewModel: InProcessModelManagerViewModel) {
-        self.viewModel = viewModel
-    }
-
-    @MainActor
-    func update(_ progress: InProcessModelDownloadProgress) {
-        viewModel?.updateDownloadProgress(progress)
     }
 }

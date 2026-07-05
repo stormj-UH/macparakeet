@@ -526,8 +526,13 @@ private final class StreamingDownloadDelegate: NSObject, URLSessionDataDelegate,
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        fileHandle?.write(data)
-        onBytesReceived(UInt64(data.count))
+        do {
+            try fileHandle?.write(contentsOf: data)
+            onBytesReceived(UInt64(data.count))
+        } catch {
+            finish(throwing: error)
+            dataTask.cancel()
+        }
     }
 
     func urlSession(
