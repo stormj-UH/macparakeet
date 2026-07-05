@@ -32,7 +32,10 @@ final class MLXLocalLLMIntegrationTests: XCTestCase {
             options: ChatCompletionOptions(temperature: 0, maxTokens: 16)
         )
 
-        XCTAssertFalse(response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(
+            response.content.localizedCaseInsensitiveContains("local mlx"),
+            "Expected the model to follow the zero-temperature instruction, got: \(response.content)"
+        )
         #else
         throw XCTSkip("Run with MACPARAKEET_ENABLE_MLX_LOCAL_LLM=1 so the gated MLX target is linked.")
         #endif

@@ -83,7 +83,7 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
     public func testConnection(context: LLMExecutionContext) async throws {
         try Task.checkCancellation()
-        await lifetimeCoordinator.beginGeneration()
+        try await lifetimeCoordinator.beginGeneration()
         do {
             try Task.checkCancellation()
             try await loadRuntime(for: context.providerConfig)
@@ -127,7 +127,7 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         }
 
         try Task.checkCancellation()
-        await lifetimeCoordinator.beginGeneration()
+        try await lifetimeCoordinator.beginGeneration()
 
         do {
             try Task.checkCancellation()
@@ -178,7 +178,16 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         options: ChatCompletionOptions,
         emit: (@Sendable (String) -> Void)?
     ) async throws -> CollectedLocalLLMResponse {
-        let chunks = Self.splitForMapReduce(messages, maxCharacters: chunkCharacterLimit)
+        guard Self.inputCharacterCount(messages) > chunkCharacterLimit else {
+            return try await generateSingle(messages: messages, options: options, emit: emit)
+        }
+
+        let promptBudget = Self.promptBudget(maxCharacters: chunkCharacterLimit)
+        let chunks = Self.splitForMapReduce(messages, maxCharacters: promptBudget.chunkCharacters)
+        guard chunks.count > 1 else {
+            return try await generateSingle(messages: messages, options: options, emit: emit)
+        }
+
         var partials: [String] = []
         var mergedMetrics: LLMGenerationMetrics?
 
@@ -188,7 +197,8 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
                 originalMessages: messages,
                 chunk: chunk,
                 index: offset + 1,
-                total: chunks.count
+                total: chunks.count,
+                conversationContextMaxCharacters: promptBudget.contextCharacters
             )
             let response = try await generateSingle(
                 messages: mapMessages,
@@ -201,7 +211,9 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
         let reduceMessages = Self.reduceMessages(
             originalMessages: messages,
-            partials: partials
+            partials: partials,
+            conversationContextMaxCharacters: promptBudget.contextCharacters,
+            partialResultsMaxCharacters: promptBudget.partialResultCharacters
         )
         let reduceResponse = try await generateSingle(
             messages: reduceMessages,
@@ -291,10 +303,14 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         originalMessages: [ChatMessage],
         chunk: String,
         index: Int,
-        total: Int
+        total: Int,
+        conversationContextMaxCharacters: Int
     ) -> [ChatMessage] {
         let systemMessages = originalMessages.filter { $0.role == .system }
-        let originalConversationContext = compactConversationContext(originalMessages)
+        let originalConversationContext = compactConversationContext(
+            originalMessages,
+            maxCharacters: conversationContextMaxCharacters
+        )
         return systemMessages + [
             ChatMessage(
                 role: .user,
@@ -313,13 +329,19 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
 
     private static func reduceMessages(
         originalMessages: [ChatMessage],
-        partials: [String]
+        partials: [String],
+        conversationContextMaxCharacters: Int,
+        partialResultsMaxCharacters: Int
     ) -> [ChatMessage] {
         let systemMessages = originalMessages.filter { $0.role == .system }
-        let originalConversationContext = compactConversationContext(originalMessages)
+        let originalConversationContext = compactConversationContext(
+            originalMessages,
+            maxCharacters: conversationContextMaxCharacters
+        )
         let combined = partials.enumerated()
             .map { "Chunk \($0.offset + 1):\n\($0.element)" }
             .joined(separator: "\n\n")
+        let boundedCombined = middleTruncated(combined, maxCharacters: partialResultsMaxCharacters)
         return systemMessages + [
             ChatMessage(
                 role: .user,
@@ -330,7 +352,7 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
                 \(originalConversationContext)
 
                 Chunk results:
-                \(combined)
+                \(boundedCombined)
                 """
             ),
         ]
@@ -353,17 +375,28 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         guard text.count > maxCharacters else { return text }
 
         let boundedLimit = max(1, maxCharacters)
-        let headCount = boundedLimit / 2
-        let tailCount = boundedLimit - headCount
+        let marker = "\n\n[...truncated for local model memory...]\n\n"
+        guard boundedLimit > marker.count + 2 else {
+            return String(text.prefix(boundedLimit))
+        }
+
+        let remainingCharacters = boundedLimit - marker.count
+        let headCount = remainingCharacters / 2
+        let tailCount = remainingCharacters - headCount
         let headEnd = text.index(text.startIndex, offsetBy: headCount)
         let tailStart = text.index(text.endIndex, offsetBy: -tailCount)
-        return """
-        \(text[..<headEnd])
+        return "\(text[..<headEnd])\(marker)\(text[tailStart...])"
+    }
 
-        [...conversation truncated for local model memory...]
-
-        \(text[tailStart...])
-        """
+    private static func promptBudget(maxCharacters: Int) -> LocalLLMPromptBudget {
+        let boundedLimit = max(1, maxCharacters)
+        let contextCharacters = max(1, boundedLimit / 3)
+        let payloadCharacters = max(1, boundedLimit - contextCharacters)
+        return LocalLLMPromptBudget(
+            chunkCharacters: payloadCharacters,
+            contextCharacters: contextCharacters,
+            partialResultCharacters: payloadCharacters
+        )
     }
 
     private static func merge(
@@ -387,16 +420,33 @@ private struct CollectedLocalLLMResponse: Sendable {
     let metrics: LLMGenerationMetrics?
 }
 
+private struct LocalLLMPromptBudget: Sendable {
+    let chunkCharacters: Int
+    let contextCharacters: Int
+    let partialResultCharacters: Int
+}
+
 private actor LocalLLMLifetimeCoordinator {
     private var unloadTask: Task<Void, Never>?
     private var generationActive = false
-    private var waitingGenerations: [CheckedContinuation<Void, Never>] = []
+    private var waitingGenerations: [WaitingGeneration] = []
 
-    func beginGeneration() async {
+    func beginGeneration() async throws {
+        try Task.checkCancellation()
         if generationActive {
-            await withCheckedContinuation { continuation in
-                waitingGenerations.append(continuation)
+            let waiterID = UUID()
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    waitingGenerations.append(
+                        WaitingGeneration(id: waiterID, continuation: continuation)
+                    )
+                }
+            } onCancel: {
+                Task {
+                    await self.cancelWaitingGeneration(id: waiterID)
+                }
             }
+            try Task.checkCancellation()
             return
         }
 
@@ -407,12 +457,19 @@ private actor LocalLLMLifetimeCoordinator {
     func endGeneration(runtime: any LocalLLMRuntime, delayNanoseconds: UInt64) {
         if !waitingGenerations.isEmpty {
             let next = waitingGenerations.removeFirst()
-            next.resume()
+            next.continuation.resume()
             return
         }
 
         generationActive = false
         scheduleUnload(runtime: runtime, delayNanoseconds: delayNanoseconds)
+    }
+
+    private func cancelWaitingGeneration(id: UUID) {
+        guard let index = waitingGenerations.firstIndex(where: { $0.id == id }) else { return }
+
+        let waitingGeneration = waitingGenerations.remove(at: index)
+        waitingGeneration.continuation.resume(throwing: CancellationError())
     }
 
     private func cancelPendingUnload() {
@@ -437,6 +494,11 @@ private actor LocalLLMLifetimeCoordinator {
             }
         }
     }
+}
+
+private struct WaitingGeneration {
+    let id: UUID
+    let continuation: CheckedContinuation<Void, Error>
 }
 
 private enum ProcessRSSSampler {

@@ -40,20 +40,21 @@ final class InProcessLLMClientTests: XCTestCase {
         let modelDirectory = temporaryModelDirectory()
         let runtime = FakeLocalLLMRuntime(eventPlans: [
             [.text("map-1")],
+            [.text("map-2")],
+            [.text("map-3")],
             [.text("final")],
         ])
         let client = InProcessLLMClient(
             runtime: runtime,
             modelDirectoryResolver: { _ in modelDirectory },
             chunkCharacterThreshold: 10,
-            chunkCharacterLimit: 500,
+            chunkCharacterLimit: 60,
             idleUnloadDelaySeconds: 60
         )
 
         let response = try await client.chatCompletion(
             messages: [
-                ChatMessage(role: .system, content: "Be faithful."),
-                ChatMessage(role: .user, content: String(repeating: "a", count: 30)),
+                ChatMessage(role: .user, content: String(repeating: "a", count: 100)),
             ],
             context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "chunk-test")),
             options: .default
@@ -66,18 +67,47 @@ final class InProcessLLMClientTests: XCTestCase {
         XCTAssertTrue(requestContents.last?.contains("Combine the chunk results") == true)
     }
 
+    func testChunkingBypassesMapReduceWhenSplitProducesOneChunk() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(eventPlans: [
+            [.text("single")],
+        ])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            chunkCharacterThreshold: 10,
+            chunkCharacterLimit: 500,
+            idleUnloadDelaySeconds: 60
+        )
+
+        let response = try await client.chatCompletion(
+            messages: [
+                ChatMessage(role: .user, content: String(repeating: "a", count: 450)),
+            ],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "single-chunk-test")),
+            options: .default
+        )
+
+        XCTAssertEqual(response.content, "single")
+        let requestContents = await runtime.requestContents()
+        XCTAssertEqual(requestContents.count, 1)
+        XCTAssertFalse(requestContents[0].contains("Process chunk"))
+        XCTAssertFalse(requestContents[0].contains("Combine the chunk results"))
+    }
+
     func testLongInputReducePromptPreservesConversationContext() async throws {
         let modelDirectory = temporaryModelDirectory()
         let runtime = FakeLocalLLMRuntime(eventPlans: [
             [.text("map-1")],
             [.text("map-2")],
+            [.text("map-3")],
             [.text("final")],
         ])
         let client = InProcessLLMClient(
             runtime: runtime,
             modelDirectoryResolver: { _ in modelDirectory },
             chunkCharacterThreshold: 10,
-            chunkCharacterLimit: 160,
+            chunkCharacterLimit: 900,
             idleUnloadDelaySeconds: 60
         )
 
@@ -86,7 +116,10 @@ final class InProcessLLMClientTests: XCTestCase {
                 ChatMessage(role: .system, content: "Be faithful."),
                 ChatMessage(role: .user, content: "Earlier user asked for Alpha."),
                 ChatMessage(role: .assistant, content: "Earlier assistant answered with Alpha."),
-                ChatMessage(role: .user, content: "Final user asks for Beta. " + String(repeating: "b", count: 220)),
+                ChatMessage(
+                    role: .user,
+                    content: String(repeating: "b", count: 1_400) + " Final user asks for Beta."
+                ),
             ],
             context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "chunk-context-test")),
             options: .default
@@ -105,6 +138,40 @@ final class InProcessLLMClientTests: XCTestCase {
         XCTAssertTrue(reducePrompt.contains("Earlier user asked for Alpha."))
         XCTAssertTrue(reducePrompt.contains("Earlier assistant answered with Alpha."))
         XCTAssertTrue(reducePrompt.contains("Final user asks for Beta."))
+    }
+
+    func testChunkedPromptsBoundContextAndPartialResults() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let largePartial = String(repeating: "partial ", count: 200)
+        let runtime = FakeLocalLLMRuntime(eventPlans: [
+            [.text(largePartial)],
+            [.text(largePartial)],
+            [.text(largePartial)],
+            [.text("final")],
+        ])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            chunkCharacterThreshold: 10,
+            chunkCharacterLimit: 300,
+            idleUnloadDelaySeconds: 60
+        )
+
+        _ = try await client.chatCompletion(
+            messages: [
+                ChatMessage(role: .user, content: String(repeating: "a", count: 500)),
+            ],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "prompt-budget-test")),
+            options: .default
+        )
+
+        let requestContents = await runtime.requestContents()
+        XCTAssertGreaterThan(requestContents.count, 1)
+        XCTAssertTrue(requestContents.dropLast().allSatisfy { $0.count < 800 })
+
+        let reducePrompt = try XCTUnwrap(requestContents.last)
+        XCTAssertLessThan(reducePrompt.count, 800)
+        XCTAssertTrue(reducePrompt.contains("[...truncated for local model memory...]"))
     }
 
     func testQueuedGenerationDoesNotUnloadRuntimeBetweenRequests() async throws {
@@ -143,6 +210,58 @@ final class InProcessLLMClientTests: XCTestCase {
         let unloadCount = await runtime.unloadCallCount()
         XCTAssertEqual(requestContents, ["First", "Second"])
         XCTAssertEqual(unloadCount, 1)
+    }
+
+    func testQueuedGenerationCancellationReturnsBeforeActiveGenerationFinishes() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(
+            eventPlans: [
+                [.text("first")],
+                [.text("second")],
+            ],
+            delayNanoseconds: 700_000_000
+        )
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            idleUnloadDelaySeconds: 60
+        )
+
+        let firstTask = Task {
+            try await client.chatCompletion(
+                messages: [ChatMessage(role: .user, content: "First")],
+                context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "queued-cancel-test")),
+                options: .default
+            )
+        }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let queuedTask = Task {
+            try await client.chatCompletion(
+                messages: [ChatMessage(role: .user, content: "Second")],
+                context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "queued-cancel-test")),
+                options: .default
+            )
+        }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let cancellationStart = Date()
+        queuedTask.cancel()
+
+        do {
+            _ = try await queuedTask.value
+            XCTFail("Expected queued local generation to throw CancellationError")
+        } catch is CancellationError {
+            XCTAssertLessThan(Date().timeIntervalSince(cancellationStart), 0.3)
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        let firstResponse = try await firstTask.value
+        XCTAssertEqual(firstResponse.content, "first")
+
+        let requestContents = await runtime.requestContents()
+        XCTAssertEqual(requestContents, ["First"])
     }
 
     func testStreamingYieldsRuntimeChunks() async throws {
