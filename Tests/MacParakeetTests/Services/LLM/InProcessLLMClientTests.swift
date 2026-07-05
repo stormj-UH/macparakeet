@@ -1,0 +1,234 @@
+import XCTest
+@testable import MacParakeetCore
+
+final class InProcessLLMClientTests: XCTestCase {
+    func testChatCompletionLoadsRuntimeAndReturnsMetrics() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let metrics = LLMGenerationMetrics(
+            tokensPerSecond: 42,
+            promptTokensPerSecond: 120,
+            timeToFirstTokenMs: 25,
+            peakRSSBytes: 1_000
+        )
+        let runtime = FakeLocalLLMRuntime(eventPlans: [[
+            .text("hello"),
+            .text(" local"),
+            .metrics(metrics),
+        ]])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            idleUnloadDelaySeconds: 60
+        )
+
+        let response = try await client.chatCompletion(
+            messages: [ChatMessage(role: .user, content: "Summarize.")],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "test-model")),
+            options: .default
+        )
+
+        XCTAssertEqual(response.content, "hello local")
+        XCTAssertEqual(response.model, "test-model")
+        XCTAssertEqual(response.generationMetrics?.tokensPerSecond, 42)
+        XCTAssertGreaterThanOrEqual(response.generationMetrics?.peakRSSBytes ?? 0, 1_000)
+
+        let loadedModels = await runtime.loadedModels()
+        XCTAssertEqual(loadedModels, [LocalLLMModelReference(modelName: "test-model", directory: modelDirectory)])
+    }
+
+    func testLongInputUsesMapReduceChunksBeforeFinalAnswer() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(eventPlans: [
+            [.text("map-1")],
+            [.text("final")],
+        ])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            chunkCharacterThreshold: 10,
+            chunkCharacterLimit: 500,
+            idleUnloadDelaySeconds: 60
+        )
+
+        let response = try await client.chatCompletion(
+            messages: [
+                ChatMessage(role: .system, content: "Be faithful."),
+                ChatMessage(role: .user, content: String(repeating: "a", count: 30)),
+            ],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "chunk-test")),
+            options: .default
+        )
+
+        XCTAssertEqual(response.content, "final")
+        let requestContents = await runtime.requestContents()
+        XCTAssertGreaterThan(requestContents.count, 1)
+        XCTAssertTrue(requestContents.dropLast().allSatisfy { $0.contains("Process chunk") })
+        XCTAssertTrue(requestContents.last?.contains("Combine the chunk results") == true)
+    }
+
+    func testStreamingYieldsRuntimeChunks() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(eventPlans: [[
+            .text("stream"),
+            .text("-chunk"),
+        ]])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            idleUnloadDelaySeconds: 60
+        )
+
+        let stream = client.chatCompletionStream(
+            messages: [ChatMessage(role: .user, content: "Hi")],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "stream-test")),
+            options: .default
+        )
+
+        var chunks: [String] = []
+        for try await chunk in stream {
+            chunks.append(chunk)
+        }
+
+        XCTAssertEqual(chunks, ["stream", "-chunk"])
+    }
+
+    func testCancellationPropagates() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(
+            eventPlans: [[.failure(CancellationError())]]
+        )
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            idleUnloadDelaySeconds: 60
+        )
+
+        do {
+            _ = try await client.chatCompletion(
+                messages: [ChatMessage(role: .user, content: "Cancel me")],
+                context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "cancel-test")),
+                options: .default
+            )
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
+
+    func testIdleUnloadRunsAfterGenerationDelay() async throws {
+        let modelDirectory = temporaryModelDirectory()
+        let runtime = FakeLocalLLMRuntime(eventPlans: [[.text("done")]])
+        let client = InProcessLLMClient(
+            runtime: runtime,
+            modelDirectoryResolver: { _ in modelDirectory },
+            idleUnloadDelaySeconds: 0.01
+        )
+
+        _ = try await client.chatCompletion(
+            messages: [ChatMessage(role: .user, content: "Hi")],
+            context: LLMExecutionContext(providerConfig: .inProcessLocal(model: "idle-test")),
+            options: .default
+        )
+
+        try await Task.sleep(nanoseconds: 80_000_000)
+        let unloadCount = await runtime.unloadCallCount()
+        XCTAssertEqual(unloadCount, 1)
+    }
+
+    private func temporaryModelDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
+}
+
+private actor FakeLocalLLMRuntime: LocalLLMRuntime {
+    private var eventPlans: [[FakeRuntimeEvent]]
+    private let delayNanoseconds: UInt64
+    private var loadCalls: [LocalLLMModelReference] = []
+    private var unloadCalls = 0
+    private var requests: [[ChatMessage]] = []
+    private var latestMetricsValue: LLMGenerationMetrics?
+
+    init(
+        eventPlans: [[FakeRuntimeEvent]],
+        delayNanoseconds: UInt64 = 0
+    ) {
+        self.eventPlans = eventPlans
+        self.delayNanoseconds = delayNanoseconds
+    }
+
+    func load(model: LocalLLMModelReference) async throws {
+        loadCalls.append(model)
+    }
+
+    func unload() async {
+        unloadCalls += 1
+    }
+
+    func generateStream(
+        messages: [ChatMessage],
+        options: ChatCompletionOptions
+    ) async throws -> AsyncThrowingStream<LocalLLMRuntimeEvent, Error> {
+        requests.append(messages)
+        let events = eventPlans.isEmpty ? [.text("fallback")] : eventPlans.removeFirst()
+        latestMetricsValue = events.compactMap { event in
+            if case .metrics(let metrics) = event {
+                return metrics
+            }
+            return nil
+        }.last
+        let delayNanoseconds = delayNanoseconds
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for event in events {
+                        if delayNanoseconds > 0 {
+                            try await Task.sleep(nanoseconds: delayNanoseconds)
+                        }
+                        try Task.checkCancellation()
+                        switch event {
+                        case .text(let text):
+                            continuation.yield(.text(text))
+                        case .metrics(let metrics):
+                            continuation.yield(.metrics(metrics))
+                        case .failure(let error):
+                            continuation.finish(throwing: error)
+                            return
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    func instrumentation() async -> LLMGenerationMetrics? {
+        latestMetricsValue
+    }
+
+    func loadedModels() -> [LocalLLMModelReference] {
+        loadCalls
+    }
+
+    func unloadCallCount() -> Int {
+        unloadCalls
+    }
+
+    func requestContents() -> [String] {
+        requests.map { request in
+            request.map(\.content).joined(separator: "\n\n")
+        }
+    }
+}
+
+private enum FakeRuntimeEvent: Sendable {
+    case text(String)
+    case metrics(LLMGenerationMetrics)
+    case failure(any Error & Sendable)
+}
