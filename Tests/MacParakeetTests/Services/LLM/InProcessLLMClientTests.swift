@@ -93,6 +93,13 @@ final class InProcessLLMClientTests: XCTestCase {
         )
 
         let requestContents = await runtime.requestContents()
+        let mapPrompts = requestContents.dropLast()
+        XCTAssertFalse(mapPrompts.isEmpty)
+        XCTAssertTrue(mapPrompts.allSatisfy { $0.contains("Original conversation context") })
+        XCTAssertTrue(mapPrompts.allSatisfy { $0.contains("Earlier user asked for Alpha.") })
+        XCTAssertTrue(mapPrompts.allSatisfy { $0.contains("Earlier assistant answered with Alpha.") })
+        XCTAssertTrue(mapPrompts.allSatisfy { $0.contains("Final user asks for Beta.") })
+
         let reducePrompt = try XCTUnwrap(requestContents.last)
         XCTAssertTrue(reducePrompt.contains("Original conversation context"))
         XCTAssertTrue(reducePrompt.contains("Earlier user asked for Alpha."))

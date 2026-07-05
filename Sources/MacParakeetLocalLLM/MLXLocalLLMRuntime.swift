@@ -9,7 +9,7 @@ import OSLog
 
 public actor MLXLocalLLMRuntime: LocalLLMRuntime {
     private let logger = Logger(subsystem: "com.macparakeet.core", category: "MLXLocalLLMRuntime")
-    private var session: ChatSession?
+    private var modelContainer: ModelContainer?
     private var loadedModel: LocalLLMModelReference?
     private var latestMetrics: LLMGenerationMetrics?
     private var generationInProgress = false
@@ -20,20 +20,19 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
     public func load(model: LocalLLMModelReference) async throws {
         try Task.checkCancellation()
         if generationInProgress {
-            guard loadedModel == model, session != nil else {
+            guard loadedModel == model, modelContainer != nil else {
                 throw LLMError.providerError("Cannot switch local MLX models while generation is in progress.")
             }
             return
         }
 
-        if loadedModel == model, session != nil {
+        if loadedModel == model, modelContainer != nil {
             return
         }
 
         clearLoadedState()
 
-        let container = try await loadModelContainer(from: model.directory)
-        session = ChatSession(container)
+        modelContainer = try await loadModelContainer(from: model.directory)
         loadedModel = model
         unloadAfterGeneration = false
         logger.info("Loaded local MLX model \(model.modelName, privacy: .public)")
@@ -53,7 +52,7 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
         messages: [ChatMessage],
         options: ChatCompletionOptions
     ) async throws -> AsyncThrowingStream<LocalLLMRuntimeEvent, Error> {
-        guard session != nil else {
+        guard modelContainer != nil else {
             throw LLMError.modelNotFound("Local MLX model is not loaded.")
         }
         guard !generationInProgress else {
@@ -90,11 +89,12 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
         }
 
         do {
-            guard let session else {
+            guard let modelContainer else {
                 throw LLMError.modelNotFound("Local MLX model is not loaded.")
             }
 
             try Task.checkCancellation()
+            let session = ChatSession(modelContainer)
             let prompt = Self.prompt(from: messages)
             let parameters = GenerateParameters(
                 temperature: Float(options.temperature ?? 0.2),
@@ -143,7 +143,7 @@ public actor MLXLocalLLMRuntime: LocalLLMRuntime {
     }
 
     private func clearLoadedState() {
-        session = nil
+        modelContainer = nil
         loadedModel = nil
         latestMetrics = nil
     }

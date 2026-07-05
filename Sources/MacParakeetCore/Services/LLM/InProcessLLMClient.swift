@@ -293,12 +293,17 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
         total: Int
     ) -> [ChatMessage] {
         let systemMessages = originalMessages.filter { $0.role == .system }
+        let originalConversationContext = compactConversationContext(originalMessages)
         return systemMessages + [
             ChatMessage(
                 role: .user,
                 content: """
                 Process chunk \(index) of \(total) for the user's request. Preserve facts exactly and do not infer missing details.
 
+                Original conversation context, including user and assistant turns:
+                \(originalConversationContext)
+
+                Chunk:
                 \(chunk)
                 """
             ),
