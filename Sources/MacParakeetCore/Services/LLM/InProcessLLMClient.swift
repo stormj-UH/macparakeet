@@ -439,6 +439,12 @@ private actor LocalLLMLifetimeCoordinator {
 }
 
 private enum ProcessRSSSampler {
+    #if compiler(>=6.2)
+    private static let currentTaskPort: mach_port_t = mach_task_self_
+    #else
+    nonisolated(unsafe) private static let currentTaskPort: mach_port_t = mach_task_self_
+    #endif
+
     static func currentResidentSetSizeBytes() -> UInt64? {
         #if os(macOS)
         var info = mach_task_basic_info_data_t()
@@ -447,7 +453,7 @@ private enum ProcessRSSSampler {
         )
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+                task_info(currentTaskPort, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
             }
         }
         guard result == KERN_SUCCESS else { return nil }
