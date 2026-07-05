@@ -109,13 +109,27 @@ public final class InProcessLLMClient: LLMClientProtocol, Sendable {
             return URL(fileURLWithPath: rawPath, isDirectory: true)
         }
 
-        let directory = InProcessLocalModelCatalog.modelDirectory(for: config.modelName)
-        guard FileManager.default.fileExists(atPath: directory.path) else {
+        return try managedModelDirectory(for: config)
+    }
+
+    static func managedModelDirectory(
+        for config: LLMProviderConfig,
+        manifest: InProcessLocalModelManifest = InProcessLocalModelCatalog.defaultManifest,
+        cacheRoot: URL = InProcessLocalModelCatalog.defaultCacheRoot(),
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        do {
+            return try InProcessLocalModelCatalog.verifiedManagedCacheDirectory(
+                for: config.modelName,
+                manifest: manifest,
+                cacheRoot: cacheRoot,
+                fileManager: fileManager
+            )
+        } catch {
             throw LLMError.modelNotFound(
-                "Download the local AI model before using \(config.modelName), or set \(modelDirectoryEnvironmentVariable) to a local MLX model directory."
+                "Download and verify the local AI model before using \(config.modelName), or set \(modelDirectoryEnvironmentVariable) to a local MLX model directory."
             )
         }
-        return directory
     }
 
     // MARK: - Generation

@@ -102,12 +102,10 @@ final class InProcessModelDownloaderTests: XCTestCase {
             await recorder.append(progress.completedBytes)
         }
 
-        let validValues: Set<UInt64> = [0, 2, 3, 4, 6]
         let recorded = await recorder.values()
-        XCTAssertTrue(
-            recorded.allSatisfy { validValues.contains($0) },
-            "Progress double-counted the discarded resume offset: \(recorded)"
-        )
+        XCTAssertEqual(recorded, recorded.sorted(), "Progress moved backward: \(recorded)")
+        XCTAssertFalse(recorded.contains(3), "Discarded resume offset should not be emitted before response: \(recorded)")
+        XCTAssertTrue(recorded.allSatisfy { $0 <= 6 }, "Progress overcounted the file size: \(recorded)")
         XCTAssertEqual(
             try Data(contentsOf: fixture.directory.appendingPathComponent("model.safetensors")),
             Data("abcdef".utf8)
@@ -167,7 +165,7 @@ final class InProcessModelDownloaderTests: XCTestCase {
         )
     }
 
-    func testIsDefaultModelDownloadedChecksPresenceAndSize() async throws {
+    func testIsDefaultModelDownloadedRequiresVerificationMarkerAndRejectsSameSizeCorruption() async throws {
         let fixture = try makeFixture()
         try writeFixtureFiles(fixture)
         let downloader = InProcessModelDownloader(
@@ -179,11 +177,77 @@ final class InProcessModelDownloaderTests: XCTestCase {
         let downloaded = await downloader.isDefaultModelDownloaded()
         XCTAssertTrue(downloaded)
 
+        let corruptFile = fixture.directory.appendingPathComponent("config.json")
+        let originalModifiedAt = try FileManager.default
+            .attributesOfItem(atPath: corruptFile.path)[.modificationDate] as? Date
+        try Data(repeating: 0x78, count: fixture.files["config.json"]!.count).write(to: corruptFile)
+        if let originalModifiedAt {
+            try FileManager.default.setAttributes(
+                [.modificationDate: originalModifiedAt],
+                ofItemAtPath: corruptFile.path
+            )
+        }
+        let afterSameSizeCorruption = await downloader.isDefaultModelDownloaded()
+        XCTAssertFalse(afterSameSizeCorruption)
+
+        try writeFixtureFiles(fixture)
+        _ = try await downloader.verifyDefaultModel()
+        let managedDirectory = try InProcessLLMClient.managedModelDirectory(
+            for: .inProcessLocal(model: fixture.manifest.modelID),
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root
+        )
+        XCTAssertEqual(managedDirectory.standardizedFileURL, fixture.directory.standardizedFileURL)
+
         try FileManager.default.removeItem(
             at: fixture.directory.appendingPathComponent("config.json")
         )
         let afterRemoval = await downloader.isDefaultModelDownloaded()
         XCTAssertFalse(afterRemoval)
+        XCTAssertThrowsError(
+            try InProcessLLMClient.managedModelDirectory(
+                for: .inProcessLocal(model: fixture.manifest.modelID),
+                manifest: fixture.manifest,
+                cacheRoot: fixture.root
+            )
+        )
+    }
+
+    func testDownloadRejectsManifestPathEscapingModelDirectory() async throws {
+        let fixture = try makeFixture(files: ["../escape.bin": Data("escape".utf8)])
+        let downloader = InProcessModelDownloader(
+            manifest: fixture.manifest,
+            cacheRoot: fixture.root,
+            transport: fixture.transport
+        )
+
+        do {
+            _ = try await downloader.downloadDefaultModel()
+            XCTFail("Expected manifest path validation to reject directory traversal")
+        } catch InProcessModelDownloaderError.invalidManifestPath("../escape.bin") {
+            // Expected.
+        } catch {
+            XCTFail("Expected invalidManifestPath, got \(error)")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent("escape.bin").path))
+    }
+
+    func testRedirectPolicyAllowsOnlyTrustedHTTPSHosts() {
+        XCTAssertTrue(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+            URL(string: "https://huggingface.co/example/model")!
+        ))
+        XCTAssertTrue(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+            URL(string: "https://cdn-lfs.huggingface.co/example/model")!
+        ))
+        XCTAssertTrue(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+            URL(string: "https://cas-bridge.xethub.hf.co/example/model")!
+        ))
+        XCTAssertFalse(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+            URL(string: "http://huggingface.co/example/model")!
+        ))
+        XCTAssertFalse(URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(
+            URL(string: "https://example.com/example/model")!
+        ))
     }
 
     func testDeleteRemovesModelDirectory() async throws {

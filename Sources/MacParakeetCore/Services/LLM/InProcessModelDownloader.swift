@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 public struct InProcessLocalModelFile: Sendable, Equatable {
@@ -73,6 +74,12 @@ public enum InProcessModelDownloaderError: LocalizedError, Equatable {
     case sizeMismatch(file: String, expected: UInt64, actual: UInt64)
     case checksumMismatch(file: String, expected: String, actual: String)
     case invalidHTTPStatus(Int)
+    case invalidManifestPath(String)
+    case manifestPathEscapesCache(String)
+    case symlinkedManifestPath(String)
+    case invalidVerificationMarker
+    case disallowedRedirect(String)
+    case fileCreationFailed(path: String, errno: Int32)
 
     public var errorDescription: String? {
         switch self {
@@ -84,11 +91,25 @@ public enum InProcessModelDownloaderError: LocalizedError, Equatable {
             return "Local AI model file \(file) failed checksum verification."
         case .invalidHTTPStatus(let status):
             return "Model download failed with HTTP \(status)."
+        case .invalidManifestPath(let path):
+            return "Local AI model manifest path is not a safe relative path: \(path)"
+        case .manifestPathEscapesCache(let path):
+            return "Local AI model manifest path escapes the model cache: \(path)"
+        case .symlinkedManifestPath(let path):
+            return "Local AI model cache path uses a symbolic link: \(path)"
+        case .invalidVerificationMarker:
+            return "Local AI model verification marker is missing or stale."
+        case .disallowedRedirect(let url):
+            return "Model download redirected to an untrusted URL: \(url)"
+        case .fileCreationFailed(let path, let code):
+            return "Could not create local AI model cache file \(path) (errno \(code))."
         }
     }
 }
 
 public enum InProcessLocalModelCatalog {
+    static let verificationMarkerFileName = ".macparakeet-verified-manifest.json"
+
     public static let defaultManifest = InProcessLocalModelManifest(
         modelID: "mlx-community/Qwen3-4B-Instruct-2507-DDWQ",
         displayName: "Qwen3 4B Instruct (DDWQ)",
@@ -164,6 +185,245 @@ public enum InProcessLocalModelCatalog {
             .replacingOccurrences(of: "/", with: "__")
             .replacingOccurrences(of: ":", with: "_")
     }
+
+    static func verifiedManagedCacheDirectory(
+        for modelID: String,
+        manifest: InProcessLocalModelManifest = defaultManifest,
+        cacheRoot: URL = defaultCacheRoot(),
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        guard modelID == manifest.modelID else {
+            throw LLMError.modelNotFound("Download the supported local AI model before using \(modelID).")
+        }
+        let directory = modelDirectory(for: modelID, cacheRoot: cacheRoot)
+        guard try hasValidVerificationMarker(for: manifest, in: directory, fileManager: fileManager) else {
+            throw LLMError.modelNotFound("Download and verify the local AI model before using \(modelID).")
+        }
+        return directory
+    }
+
+    static func fileURL(
+        for file: InProcessLocalModelFile,
+        in directory: URL,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let components = try validatedManifestPathComponents(file.path)
+        let base = directory.standardizedFileURL
+        try assertNotSymlink(base)
+        var candidate = base
+        for component in components {
+            candidate.appendPathComponent(component, isDirectory: false)
+        }
+        let standardized = candidate.standardizedFileURL
+        guard isContained(standardized, in: base) else {
+            throw InProcessModelDownloaderError.manifestPathEscapesCache(file.path)
+        }
+        try rejectSymlinkedExistingComponents(
+            components,
+            base: base,
+            originalPath: file.path,
+            fileManager: fileManager
+        )
+        return standardized
+    }
+
+    static func partialURL(for destination: URL) -> URL {
+        destination.deletingLastPathComponent()
+            .appendingPathComponent(".\(destination.lastPathComponent).part")
+    }
+
+    static func assertNotSymlink(_ url: URL) throws {
+        guard isSymlink(at: url) else { return }
+        throw InProcessModelDownloaderError.symlinkedManifestPath(url.path)
+    }
+
+    static func fileSize(at url: URL, fileManager: FileManager = .default) throws -> UInt64? {
+        if isSymlink(at: url) {
+            throw InProcessModelDownloaderError.symlinkedManifestPath(url.path)
+        }
+        guard let size = try? fileManager.attributesOfItem(atPath: url.path)[.size] as? NSNumber else {
+            return nil
+        }
+        return size.uint64Value
+    }
+
+    static func writeVerificationMarker(
+        for manifest: InProcessLocalModelManifest,
+        in directory: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        let marker = try verificationMarker(for: manifest, in: directory, fileManager: fileManager)
+        let data = try JSONEncoder().encode(marker)
+        try data.write(to: verificationMarkerURL(in: directory), options: .atomic)
+    }
+
+    static func removeVerificationMarker(
+        in directory: URL,
+        fileManager: FileManager = .default
+    ) {
+        try? fileManager.removeItem(at: verificationMarkerURL(in: directory))
+    }
+
+    static func hasValidVerificationMarker(
+        for manifest: InProcessLocalModelManifest,
+        in directory: URL,
+        fileManager: FileManager = .default
+    ) throws -> Bool {
+        let markerURL = verificationMarkerURL(in: directory)
+        guard fileManager.fileExists(atPath: markerURL.path) else { return false }
+        try assertNotSymlink(markerURL)
+        let marker: VerificationMarker
+        do {
+            marker = try JSONDecoder().decode(VerificationMarker.self, from: Data(contentsOf: markerURL))
+        } catch {
+            removeVerificationMarker(in: directory, fileManager: fileManager)
+            return false
+        }
+        let expected = try verificationMarker(for: manifest, in: directory, fileManager: fileManager)
+        let isValid = marker == expected
+        if !isValid {
+            removeVerificationMarker(in: directory, fileManager: fileManager)
+        }
+        return isValid
+    }
+
+    static func manifestFingerprint(_ manifest: InProcessLocalModelManifest) -> String {
+        var hasher = SHA256()
+        update(&hasher, manifest.modelID)
+        update(&hasher, manifest.repositoryID)
+        update(&hasher, manifest.revision)
+        for file in manifest.files.sorted(by: { $0.path < $1.path }) {
+            update(&hasher, file.path)
+            update(&hasher, String(file.sizeBytes))
+            update(&hasher, file.sha256)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func verificationMarkerURL(in directory: URL) -> URL {
+        directory.appendingPathComponent(verificationMarkerFileName, isDirectory: false)
+    }
+
+    private static func verificationMarker(
+        for manifest: InProcessLocalModelManifest,
+        in directory: URL,
+        fileManager: FileManager
+    ) throws -> VerificationMarker {
+        // The marker avoids re-hashing the 2.5 GB default model on every Settings refresh
+        // or runtime load. It is written only after a full SHA-256 pass. The cheap path
+        // trusts stable file metadata; if size, identity, modification time, or status-change
+        // time changes, the marker is invalidated and callers must run full verification again.
+        let files = try manifest.files.sorted(by: { $0.path < $1.path }).map { file in
+            let url = try fileURL(for: file, in: directory, fileManager: fileManager)
+            guard let size = try fileSize(at: url, fileManager: fileManager), size == file.sizeBytes else {
+                throw InProcessModelDownloaderError.invalidVerificationMarker
+            }
+            let metadata = try fileMarkerMetadata(at: url)
+            return VerificationMarker.FileEntry(
+                path: file.path,
+                sizeBytes: file.sizeBytes,
+                sha256: file.sha256,
+                modifiedAt: metadata.modifiedAt,
+                changedAt: metadata.changedAt,
+                deviceID: metadata.deviceID,
+                inode: metadata.inode
+            )
+        }
+        return VerificationMarker(
+            version: 1,
+            manifestFingerprint: manifestFingerprint(manifest),
+            files: files
+        )
+    }
+
+    private static func validatedManifestPathComponents(_ path: String) throws -> [String] {
+        guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\0") else {
+            throw InProcessModelDownloaderError.invalidManifestPath(path)
+        }
+        let components = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard !components.isEmpty,
+            components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })
+        else {
+            throw InProcessModelDownloaderError.invalidManifestPath(path)
+        }
+        return components
+    }
+
+    private static func isContained(_ candidate: URL, in directory: URL) -> Bool {
+        let basePath = directory.standardizedFileURL.path
+        let candidatePath = candidate.standardizedFileURL.path
+        let prefix = basePath.hasSuffix("/") ? basePath : basePath + "/"
+        return candidatePath.hasPrefix(prefix)
+    }
+
+    private static func rejectSymlinkedExistingComponents(
+        _ components: [String],
+        base: URL,
+        originalPath: String,
+        fileManager: FileManager
+    ) throws {
+        var current = base
+        for component in components {
+            current.appendPathComponent(component, isDirectory: false)
+            if isSymlink(at: current) {
+                throw InProcessModelDownloaderError.symlinkedManifestPath(originalPath)
+            }
+            guard fileManager.fileExists(atPath: current.path) else { return }
+        }
+    }
+
+    private static func isSymlink(at url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK
+    }
+
+    private static func fileMarkerMetadata(at url: URL) throws -> FileMarkerMetadata {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else {
+            throw InProcessModelDownloaderError.invalidVerificationMarker
+        }
+        guard (info.st_mode & S_IFMT) != S_IFLNK else {
+            throw InProcessModelDownloaderError.symlinkedManifestPath(url.path)
+        }
+        return FileMarkerMetadata(
+            modifiedAt: timeInterval(info.st_mtimespec),
+            changedAt: timeInterval(info.st_ctimespec),
+            deviceID: UInt64(info.st_dev),
+            inode: UInt64(info.st_ino)
+        )
+    }
+
+    private static func timeInterval(_ value: timespec) -> TimeInterval {
+        TimeInterval(value.tv_sec) + (TimeInterval(value.tv_nsec) / 1_000_000_000)
+    }
+
+    private static func update(_ hasher: inout SHA256, _ string: String) {
+        hasher.update(data: Data(string.utf8))
+        hasher.update(data: Data([0]))
+    }
+}
+
+private struct VerificationMarker: Codable, Equatable {
+    struct FileEntry: Codable, Equatable {
+        let path: String
+        let sizeBytes: UInt64
+        let sha256: String
+        let modifiedAt: TimeInterval
+        let changedAt: TimeInterval
+        let deviceID: UInt64
+        let inode: UInt64
+    }
+
+    let version: Int
+    let manifestFingerprint: String
+    let files: [FileEntry]
+}
+
+private struct FileMarkerMetadata {
+    let modifiedAt: TimeInterval
+    let changedAt: TimeInterval
+    let deviceID: UInt64
+    let inode: UInt64
 }
 
 public actor InProcessModelDownloader: InProcessModelDownloading {
@@ -193,8 +453,19 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
 
     public func isDefaultModelDownloaded() async -> Bool {
         let directory = modelDirectory()
-        return manifest.files.allSatisfy { file in
-            fileSize(at: directory.appendingPathComponent(file.path)) == file.sizeBytes
+        do {
+            if try InProcessLocalModelCatalog.hasValidVerificationMarker(
+                for: manifest,
+                in: directory,
+                fileManager: fileManager
+            ) {
+                return true
+            }
+            _ = try await verifyDefaultModel()
+            return true
+        } catch {
+            InProcessLocalModelCatalog.removeVerificationMarker(in: directory, fileManager: fileManager)
+            return false
         }
     }
 
@@ -207,10 +478,20 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
     public func verifyDefaultModel() async throws -> URL {
         try Task.checkCancellation()
         let directory = modelDirectory()
-        for file in manifest.files {
-            try verify(file: file, in: directory)
+        do {
+            for file in manifest.files {
+                try verify(file: file, in: directory)
+            }
+            try InProcessLocalModelCatalog.writeVerificationMarker(
+                for: manifest,
+                in: directory,
+                fileManager: fileManager
+            )
+            return directory
+        } catch {
+            InProcessLocalModelCatalog.removeVerificationMarker(in: directory, fileManager: fileManager)
+            throw error
         }
-        return directory
     }
 
     @discardableResult
@@ -235,7 +516,11 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
                 continue
             }
 
-            let destination = directory.appendingPathComponent(file.path)
+            let destination = try InProcessLocalModelCatalog.fileURL(
+                for: file,
+                in: directory,
+                fileManager: fileManager
+            )
             try await download(file: file, to: destination, completedBytesBeforeFile: completedBytes, progress: progress)
             completedBytes += file.sizeBytes
             await progress(progressValue(
@@ -244,6 +529,11 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
             ))
         }
 
+        try InProcessLocalModelCatalog.writeVerificationMarker(
+            for: manifest,
+            in: directory,
+            fileManager: fileManager
+        )
         return directory
     }
 
@@ -269,29 +559,31 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try InProcessLocalModelCatalog.assertNotSymlink(destination.deletingLastPathComponent())
+        try InProcessLocalModelCatalog.assertNotSymlink(destination)
         if fileManager.fileExists(atPath: destination.path) {
             try fileManager.removeItem(at: destination)
         }
 
-        let partial = partialURL(for: destination)
+        let partial = InProcessLocalModelCatalog.partialURL(for: destination)
         var attempts = 0
         while attempts < 2 {
             attempts += 1
             try Task.checkCancellation()
-            let partialSize = fileSize(at: partial) ?? 0
+            let partialSize = try InProcessLocalModelCatalog.fileSize(at: partial, fileManager: fileManager) ?? 0
             if partialSize >= file.sizeBytes {
                 if partialSize == file.sizeBytes, try isVerified(file: file, at: partial) {
+                    try InProcessLocalModelCatalog.assertNotSymlink(destination.deletingLastPathComponent())
+                    try InProcessLocalModelCatalog.assertNotSymlink(destination)
+                    if fileManager.fileExists(atPath: destination.path) {
+                        try fileManager.removeItem(at: destination)
+                    }
                     try fileManager.moveItem(at: partial, to: destination)
                     return
                 }
                 try? fileManager.removeItem(at: partial)
             }
-            let effectiveResumeOffset = fileSize(at: partial) ?? 0
-            await progress(progressValue(
-                completedBytes: completedBytesBeforeFile + effectiveResumeOffset,
-                completedFiles: completedFiles(before: file),
-                currentFile: file.path
-            ))
+            let effectiveResumeOffset = try InProcessLocalModelCatalog.fileSize(at: partial, fileManager: fileManager) ?? 0
 
             let (updates, updatesContinuation) = AsyncStream.makeStream(
                 of: InProcessModelDownloadProgress.self,
@@ -329,6 +621,8 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
 
             do {
                 try verify(file: file, at: partial)
+                try InProcessLocalModelCatalog.assertNotSymlink(destination.deletingLastPathComponent())
+                try InProcessLocalModelCatalog.assertNotSymlink(destination)
                 if fileManager.fileExists(atPath: destination.path) {
                     try fileManager.removeItem(at: destination)
                 }
@@ -346,14 +640,15 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
     }
 
     private func verify(file: InProcessLocalModelFile, in directory: URL) throws {
-        try verify(file: file, at: directory.appendingPathComponent(file.path))
+        let url = try InProcessLocalModelCatalog.fileURL(for: file, in: directory, fileManager: fileManager)
+        try verify(file: file, at: url)
     }
 
     private func verify(file: InProcessLocalModelFile, at url: URL) throws {
         guard fileManager.fileExists(atPath: url.path) else {
             throw InProcessModelDownloaderError.missingFile(file.path)
         }
-        let actualSize = fileSize(at: url) ?? 0
+        let actualSize = try InProcessLocalModelCatalog.fileSize(at: url, fileManager: fileManager) ?? 0
         guard actualSize == file.sizeBytes else {
             throw InProcessModelDownloaderError.sizeMismatch(
                 file: file.path,
@@ -372,7 +667,8 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
     }
 
     private func isFileVerified(_ file: InProcessLocalModelFile, in directory: URL) throws -> Bool {
-        try isVerified(file: file, at: directory.appendingPathComponent(file.path))
+        let url = try InProcessLocalModelCatalog.fileURL(for: file, in: directory, fileManager: fileManager)
+        return try isVerified(file: file, at: url)
     }
 
     private func isVerified(file: InProcessLocalModelFile, at url: URL) throws -> Bool {
@@ -384,18 +680,6 @@ public actor InProcessModelDownloader: InProcessModelDownloading {
         } catch {
             return false
         }
-    }
-
-    private func fileSize(at url: URL) -> UInt64? {
-        guard let size = try? fileManager.attributesOfItem(atPath: url.path)[.size] as? NSNumber else {
-            return nil
-        }
-        return size.uint64Value
-    }
-
-    private func partialURL(for destination: URL) -> URL {
-        destination.deletingLastPathComponent()
-            .appendingPathComponent(".\(destination.lastPathComponent).part")
     }
 
     private func downloadURL(for file: InProcessLocalModelFile) -> URL {
@@ -446,6 +730,20 @@ public final class URLSessionInProcessModelDownloadTransport: NSObject, InProces
     @unchecked Sendable
 {
     public override init() {}
+
+    static func isAllowedRedirectURL(_ url: URL?) -> Bool {
+        guard let url,
+            url.scheme?.lowercased() == "https",
+            let host = url.host?.lowercased()
+        else {
+            return false
+        }
+
+        return host == "huggingface.co"
+            || host.hasSuffix(".huggingface.co")
+            || host == "hf.co"
+            || host.hasSuffix(".hf.co")
+    }
 
     public func download(
         _ request: InProcessModelDownloadRequest,
@@ -535,23 +833,28 @@ private final class StreamingDownloadDelegate: NSObject, URLSessionDataDelegate,
         }
 
         do {
-            if !FileManager.default.fileExists(atPath: destination.path) {
-                FileManager.default.createFile(atPath: destination.path, contents: nil)
-            }
-            let handle = try FileHandle(forWritingTo: destination)
-            if requestedResumeOffset > 0, httpResponse.statusCode == 206 {
-                try handle.seekToEnd()
-                totalBytesWritten = requestedResumeOffset
-            } else {
-                try handle.truncate(atOffset: 0)
-                totalBytesWritten = 0
-            }
+            let handle = try openDestinationFile(for: httpResponse)
             fileHandle = handle
             completionHandler(.allow)
         } catch {
             finish(throwing: error)
             completionHandler(.cancel)
         }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard URLSessionInProcessModelDownloadTransport.isAllowedRedirectURL(request.url) else {
+            finish(throwing: InProcessModelDownloaderError.disallowedRedirect(request.url?.absoluteString ?? ""))
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
@@ -604,5 +907,43 @@ private final class StreamingDownloadDelegate: NSObject, URLSessionDataDelegate,
         lock.unlock()
         try? fileHandle?.close()
         continuation?.resume(throwing: error)
+    }
+
+    private func openDestinationFile(for httpResponse: HTTPURLResponse) throws -> FileHandle {
+        try InProcessLocalModelCatalog.assertNotSymlink(destination.deletingLastPathComponent())
+        try InProcessLocalModelCatalog.assertNotSymlink(destination)
+
+        if requestedResumeOffset > 0, httpResponse.statusCode == 206 {
+            let fileDescriptor = Darwin.open(destination.path, O_WRONLY | O_NOFOLLOW)
+            guard fileDescriptor >= 0 else {
+                throw InProcessModelDownloaderError.fileCreationFailed(path: destination.path, errno: errno)
+            }
+            let handle = FileHandle(fileDescriptor: fileDescriptor, closeOnDealloc: true)
+            let offset = try handle.seekToEnd()
+            guard offset == requestedResumeOffset else {
+                try? handle.close()
+                throw InProcessModelDownloaderError.sizeMismatch(
+                    file: destination.lastPathComponent,
+                    expected: requestedResumeOffset,
+                    actual: offset
+                )
+            }
+            totalBytesWritten = requestedResumeOffset
+            return handle
+        }
+
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        let fileDescriptor = Darwin.open(
+            destination.path,
+            O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW,
+            mode_t(0o600)
+        )
+        guard fileDescriptor >= 0 else {
+            throw InProcessModelDownloaderError.fileCreationFailed(path: destination.path, errno: errno)
+        }
+        totalBytesWritten = 0
+        return FileHandle(fileDescriptor: fileDescriptor, closeOnDealloc: true)
     }
 }
