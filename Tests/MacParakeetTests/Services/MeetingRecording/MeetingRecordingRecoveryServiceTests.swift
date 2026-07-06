@@ -437,7 +437,8 @@ final class MeetingRecordingRecoveryServiceTests: XCTestCase {
         let staleCleanedURL = fixture.folderURL.appendingPathComponent("microphone-cleaned.m4a")
         try writeM4A(to: staleCleanedURL)
         let conditionerProbe = RecoveryMicConditionerFactoryProbe()
-        let threshold = MeetingCleanedMicrophoneReadinessPolicy.production.capSeconds
+        let threshold =
+            MeetingCleanedMicrophoneReadinessPolicy.production.capSeconds
             * MeetingCleanedMicrophoneReadinessPolicy.bestMeasuredRealtimeFactor
         transcriptionService.sourceResolutionPolicy = .production
         recoveryService = MeetingRecordingRecoveryService(

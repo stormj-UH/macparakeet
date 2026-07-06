@@ -155,7 +155,8 @@ struct HealthCommand: AsyncParsableCommand {
                 report.repair = HealthReport.Repair(attempted: true, completed: true, error: nil)
                 if !json { print("Speech-stack repair completed.") }
             } catch {
-                report.repair = HealthReport.Repair(attempted: true, completed: false, error: error.localizedDescription)
+                report.repair = HealthReport.Repair(
+                    attempted: true, completed: false, error: error.localizedDescription)
                 if !json { print("Speech-stack repair failed — \(error.localizedDescription)") }
             }
         }
@@ -276,7 +277,8 @@ func probeHealthDatabase(at path: String) -> HealthDatabaseReport {
 private func databaseSchemaSkewMessage(unknownMigrations: [String]) -> String {
     let migrationList = unknownMigrations.prefix(3).joined(separator: ", ")
     let suffix = unknownMigrations.count > 3 ? ", ..." : ""
-    return "This database has been migrated by a newer MacParakeet app than this macparakeet-cli build understands (\(migrationList)\(suffix)). Upgrade macparakeet-cli and retry."
+    return
+        "This database has been migrated by a newer MacParakeet app than this macparakeet-cli build understands (\(migrationList)\(suffix)). Upgrade macparakeet-cli and retry."
 }
 
 struct HealthDatabaseReport: Encodable, Equatable {

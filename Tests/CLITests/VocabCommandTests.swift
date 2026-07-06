@@ -392,7 +392,7 @@ final class VocabCommandTests: XCTestCase {
         let outPath = tempDir.appendingPathComponent("out.json").path
         let cmd = try VocabExportCommand.parse([
             "--database", dbPath,
-            "--output", outPath
+            "--output", outPath,
         ])
         try await cmd.run()
 
@@ -454,7 +454,7 @@ final class VocabCommandTests: XCTestCase {
         let cmd = try VocabImportCommand.parse([
             "--database", dbPath,
             "--input", bundlePath,
-            "--json"
+            "--json",
         ])
         let output = try await capturingStdout {
             try await cmd.run()
@@ -469,8 +469,11 @@ final class VocabCommandTests: XCTestCase {
 
     func testImportInvalidSchemaThrows() async throws {
         let bundlePath = tempDir.appendingPathComponent("bad.json").path
-        try Data(#"{"schema":"not.us","version":1,"exportedAt":"2026-04-28T12:00:00Z","customWords":[],"textSnippets":[]}"#.utf8)
-            .write(to: URL(fileURLWithPath: bundlePath))
+        try Data(
+            #"{"schema":"not.us","version":1,"exportedAt":"2026-04-28T12:00:00Z","customWords":[],"textSnippets":[]}"#
+                .utf8
+        )
+        .write(to: URL(fileURLWithPath: bundlePath))
 
         let cmd = try VocabImportCommand.parse([
             "--database", dbPath,
@@ -524,7 +527,7 @@ final class VocabCommandTests: XCTestCase {
         let saved = dup(STDOUT_FILENO)
         defer { close(saved) }
         guard saved >= 0,
-              dup2(pipe.fileHandleForWriting.fileDescriptor, STDOUT_FILENO) >= 0
+            dup2(pipe.fileHandleForWriting.fileDescriptor, STDOUT_FILENO) >= 0
         else {
             XCTFail("failed to redirect stdout")
             return ""

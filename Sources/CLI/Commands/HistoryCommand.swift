@@ -96,10 +96,12 @@ struct TranscriptionsSubcommand: ParsableCommand {
             try AppPaths.ensureDirectories()
             let dbManager = try DatabaseManager(path: resolvedDatabasePath(database))
             let repo = TranscriptionRepository(dbQueue: dbManager.dbQueue)
-            let transcriptions = try repo.fetchLibraryPage(query: TranscriptionLibraryQuery(
-                limit: limit,
-                includeProcessing: true
-            )).items
+            let transcriptions = try repo.fetchLibraryPage(
+                query: TranscriptionLibraryQuery(
+                    limit: limit,
+                    includeProcessing: true
+                )
+            ).items
 
             if json {
                 try printJSON(transcriptions)
@@ -207,13 +209,16 @@ struct SearchTranscriptionsSubcommand: ParsableCommand {
             let dbManager = try DatabaseManager(path: resolvedDatabasePath(database))
             let repo = TranscriptionRepository(dbQueue: dbManager.dbQueue)
             let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            let results = trimmedQuery.isEmpty
+            let results =
+                trimmedQuery.isEmpty
                 ? []
-                : try repo.fetchLibraryPage(query: TranscriptionLibraryQuery(
-                    searchText: trimmedQuery,
-                    limit: limit,
-                    includeProcessing: true
-                )).items
+                : try repo.fetchLibraryPage(
+                    query: TranscriptionLibraryQuery(
+                        searchText: trimmedQuery,
+                        limit: limit,
+                        includeProcessing: true
+                    )
+                ).items
 
             if json {
                 try printJSON(results)
@@ -379,12 +384,13 @@ struct DeleteMeetingAudioSubcommand: ParsableCommand {
             }
 
             if json {
-                try printJSON(HistoryMeetingAudioDeleteResult(
-                    ok: true,
-                    id: transcription.id,
-                    removedOwnedAudio: result.removedOwnedAudio,
-                    hadAudioPath: result.hadAudioPath
-                ))
+                try printJSON(
+                    HistoryMeetingAudioDeleteResult(
+                        ok: true,
+                        id: transcription.id,
+                        removedOwnedAudio: result.removedOwnedAudio,
+                        hadAudioPath: result.hadAudioPath
+                    ))
             } else if result.removedOwnedAudio {
                 print(
                     "Detached managed meeting audio for: \"\(transcription.fileName)\". Audio was permanently removed; re-transcription and speaker detection/backfill are no longer possible for this recording."
@@ -438,11 +444,12 @@ struct ClearMeetingAudioSubcommand: ParsableCommand {
             let affectedIDs = try repo.clearStoredAudioPathsForMeetingTranscriptions(under: dir)
 
             if json {
-                try printJSON(HistoryMeetingAudioClearResult(
-                    ok: true,
-                    deletedCount: affectedIDs.count,
-                    ids: affectedIDs
-                ))
+                try printJSON(
+                    HistoryMeetingAudioClearResult(
+                        ok: true,
+                        deletedCount: affectedIDs.count,
+                        ids: affectedIDs
+                    ))
             } else {
                 print("Deleted all stored meeting audio. Saved meeting transcripts remain.")
             }
@@ -479,11 +486,13 @@ struct FavoritesSubcommand: ParsableCommand {
             try AppPaths.ensureDirectories()
             let dbManager = try DatabaseManager(path: resolvedDatabasePath(database))
             let repo = TranscriptionRepository(dbQueue: dbManager.dbQueue)
-            let favorites = try repo.fetchLibraryPage(query: TranscriptionLibraryQuery(
-                favoritesOnly: true,
-                limit: Int.max,
-                includeProcessing: true
-            )).items
+            let favorites = try repo.fetchLibraryPage(
+                query: TranscriptionLibraryQuery(
+                    favoritesOnly: true,
+                    limit: Int.max,
+                    includeProcessing: true
+                )
+            ).items
 
             if json {
                 try printJSON(favorites)

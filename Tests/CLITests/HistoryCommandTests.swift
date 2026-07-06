@@ -204,9 +204,10 @@ final class HistoryCommandTests: XCTestCase {
             transcription.id.uuidString,
             "--database", dbURL.path,
         ])
-        XCTAssertThrowsError(try captureStandardOutput {
-            try command.run()
-        })
+        XCTAssertThrowsError(
+            try captureStandardOutput {
+                try command.run()
+            })
 
         XCTAssertNotNil(try repo.fetch(id: transcription.id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: audioURL.path))
@@ -562,7 +563,9 @@ final class HistoryCommandTests: XCTestCase {
         let db = try DatabaseManager()
         let repo = TranscriptionRepository(dbQueue: db.dbQueue)
 
-        let t1 = Transcription(fileName: "file-a.mp3", rawTranscript: "um the uh budget", cleanTranscript: "The budget proposal", status: .completed)
+        let t1 = Transcription(
+            fileName: "file-a.mp3", rawTranscript: "um the uh budget", cleanTranscript: "The budget proposal",
+            status: .completed)
         let t2 = Transcription(fileName: "file-b.mp3", rawTranscript: "Unrelated content", status: .completed)
         try repo.save(t1)
         try repo.save(t2)

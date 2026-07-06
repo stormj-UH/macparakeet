@@ -82,76 +82,90 @@ final class ModelLifecycleCommandTests: XCTestCase {
         )
 
         XCTAssertEqual(models.count, 7)
-        XCTAssertEqual(models[0], SelectableSpeechModel(
-            id: "parakeet-v3",
-            name: "Parakeet TDT 0.6B v3 (Multilingual)",
-            engine: "parakeet",
-            variant: "v3",
-            size: "~465 MB",
-            installed: true,
-            selected: false,
-            language: nil
-        ))
-        XCTAssertEqual(models[1], SelectableSpeechModel(
-            id: "parakeet-v2",
-            name: "Parakeet TDT 0.6B v2 (English only)",
-            engine: "parakeet",
-            variant: "v2",
-            size: "~465 MB",
-            installed: false,
-            selected: false,
-            language: "en"
-        ))
-        XCTAssertEqual(models[2], SelectableSpeechModel(
-            id: "parakeet-unified",
-            name: "Parakeet Unified 0.6B (English (Unified))",
-            engine: "parakeet",
-            variant: "unified",
-            size: "~565 MB",
-            installed: false,
-            selected: false,
-            language: "en"
-        ))
-        XCTAssertEqual(models[3], SelectableSpeechModel(
-            id: "nemotron-multilingual-1120ms",
-            name: "Nemotron 3.5 ASR Streaming 0.6B (Multilingual Beta)",
-            engine: "nemotron",
-            variant: "multilingual-1120ms",
-            size: "~1.5 GB",
-            installed: true,
-            selected: false,
-            language: "auto"
-        ))
-        XCTAssertEqual(models[4], SelectableSpeechModel(
-            id: "nemotron-english-1120ms",
-            name: "Nemotron Speech Streaming EN 0.6B (English Beta)",
-            engine: "nemotron",
-            variant: "english-1120ms",
-            size: "~600 MB",
-            installed: false,
-            selected: false,
-            language: "en"
-        ))
-        XCTAssertEqual(models[5], SelectableSpeechModel(
-            id: "cohere-transcribe",
-            name: "Cohere Transcribe",
-            engine: "cohere",
-            variant: nil,
-            size: "~2.1 GB",
-            installed: false,
-            selected: false,
-            language: "en"
-        ))
-        XCTAssertEqual(models[6], SelectableSpeechModel(
-            id: "whisper-large-v3-v20240930-turbo-632MB",
-            name: "Whisper Large v3 Turbo",
-            engine: "whisper",
-            variant: "large-v3-v20240930_turbo_632MB",
-            size: "632 MB",
-            installed: true,
-            selected: true,
-            language: "ko"
-        ))
+        XCTAssertEqual(
+            models[0],
+            SelectableSpeechModel(
+                id: "parakeet-v3",
+                name: "Parakeet TDT 0.6B v3 (Multilingual)",
+                engine: "parakeet",
+                variant: "v3",
+                size: "~465 MB",
+                installed: true,
+                selected: false,
+                language: nil
+            ))
+        XCTAssertEqual(
+            models[1],
+            SelectableSpeechModel(
+                id: "parakeet-v2",
+                name: "Parakeet TDT 0.6B v2 (English only)",
+                engine: "parakeet",
+                variant: "v2",
+                size: "~465 MB",
+                installed: false,
+                selected: false,
+                language: "en"
+            ))
+        XCTAssertEqual(
+            models[2],
+            SelectableSpeechModel(
+                id: "parakeet-unified",
+                name: "Parakeet Unified 0.6B (English (Unified))",
+                engine: "parakeet",
+                variant: "unified",
+                size: "~565 MB",
+                installed: false,
+                selected: false,
+                language: "en"
+            ))
+        XCTAssertEqual(
+            models[3],
+            SelectableSpeechModel(
+                id: "nemotron-multilingual-1120ms",
+                name: "Nemotron 3.5 ASR Streaming 0.6B (Multilingual Beta)",
+                engine: "nemotron",
+                variant: "multilingual-1120ms",
+                size: "~1.5 GB",
+                installed: true,
+                selected: false,
+                language: "auto"
+            ))
+        XCTAssertEqual(
+            models[4],
+            SelectableSpeechModel(
+                id: "nemotron-english-1120ms",
+                name: "Nemotron Speech Streaming EN 0.6B (English Beta)",
+                engine: "nemotron",
+                variant: "english-1120ms",
+                size: "~600 MB",
+                installed: false,
+                selected: false,
+                language: "en"
+            ))
+        XCTAssertEqual(
+            models[5],
+            SelectableSpeechModel(
+                id: "cohere-transcribe",
+                name: "Cohere Transcribe",
+                engine: "cohere",
+                variant: nil,
+                size: "~2.1 GB",
+                installed: false,
+                selected: false,
+                language: "en"
+            ))
+        XCTAssertEqual(
+            models[6],
+            SelectableSpeechModel(
+                id: "whisper-large-v3-v20240930-turbo-632MB",
+                name: "Whisper Large v3 Turbo",
+                engine: "whisper",
+                variant: "large-v3-v20240930_turbo_632MB",
+                size: "632 MB",
+                installed: true,
+                selected: true,
+                language: "ko"
+            ))
     }
 
     func testLoadSelectableSpeechModelsReadsDisplayMetadataFromCapabilityRegistry() throws {
@@ -390,7 +404,8 @@ final class ModelLifecycleCommandTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        XCTAssertEqual(nemotronDownloadVariant(from: "nemotron-multilingual-1120ms", defaults: defaults), .multilingual1120)
+        XCTAssertEqual(
+            nemotronDownloadVariant(from: "nemotron-multilingual-1120ms", defaults: defaults), .multilingual1120)
         XCTAssertEqual(nemotronDownloadVariant(from: "nemotron:beta", defaults: defaults), .multilingual1120)
         XCTAssertEqual(nemotronDownloadVariant(from: "nemotron_multilingual", defaults: defaults), .multilingual1120)
         XCTAssertEqual(nemotronDownloadVariant(from: "nemotron-english-1120ms", defaults: defaults), .english1120)
@@ -657,7 +672,8 @@ final class ModelLifecycleCommandTests: XCTestCase {
                 defaults: defaults
             )
         )
-        XCTAssertFalse(isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
+        XCTAssertFalse(
+            isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
         XCTAssertFalse(isModelInUse(.init(kind: .cohere, displayName: "cohere"), defaults: defaults))
     }
 
@@ -674,7 +690,8 @@ final class ModelLifecycleCommandTests: XCTestCase {
         // would load if the user switches back from Whisper.
         XCTAssertTrue(isModelInUse(.init(kind: .parakeet(.v3), displayName: "v3"), defaults: defaults))
         XCTAssertFalse(isModelInUse(.init(kind: .parakeet(.v2), displayName: "v2"), defaults: defaults))
-        XCTAssertFalse(isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
+        XCTAssertFalse(
+            isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
     }
 
     func testIsModelInUseProtectsNemotronWhenNemotronActive() throws {
@@ -684,8 +701,10 @@ final class ModelLifecycleCommandTests: XCTestCase {
         SpeechEnginePreference.nemotron.save(to: defaults)
 
         // No persisted variant: multilingual is the default Nemotron build.
-        XCTAssertTrue(isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
-        XCTAssertFalse(isModelInUse(.init(kind: .nemotron(.english1120), displayName: "nemotron-en"), defaults: defaults))
+        XCTAssertTrue(
+            isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
+        XCTAssertFalse(
+            isModelInUse(.init(kind: .nemotron(.english1120), displayName: "nemotron-en"), defaults: defaults))
         XCTAssertFalse(
             isModelInUse(
                 .init(kind: .whisper(SpeechEnginePreference.defaultWhisperModelVariant), displayName: "whisper"),
@@ -705,7 +724,8 @@ final class ModelLifecycleCommandTests: XCTestCase {
         // The configured Parakeet build is also protected: it is what Parakeet
         // would load if the user switches back from Cohere.
         XCTAssertTrue(isModelInUse(.init(kind: .parakeet(.v3), displayName: "v3"), defaults: defaults))
-        XCTAssertFalse(isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
+        XCTAssertFalse(
+            isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
         XCTAssertFalse(
             isModelInUse(
                 .init(kind: .whisper(SpeechEnginePreference.defaultWhisperModelVariant), displayName: "whisper"),
@@ -721,12 +741,16 @@ final class ModelLifecycleCommandTests: XCTestCase {
         SpeechEnginePreference.nemotron.save(to: defaults)
         SpeechEnginePreference.saveNemotronModelVariant(.english1120, defaults: defaults)
 
-        XCTAssertTrue(isModelInUse(.init(kind: .nemotron(.english1120), displayName: "nemotron-en"), defaults: defaults))
-        XCTAssertFalse(isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
+        XCTAssertTrue(
+            isModelInUse(.init(kind: .nemotron(.english1120), displayName: "nemotron-en"), defaults: defaults))
+        XCTAssertFalse(
+            isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
 
         SpeechEnginePreference.saveNemotronModelVariant(.multilingual1120, defaults: defaults)
-        XCTAssertTrue(isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
-        XCTAssertFalse(isModelInUse(.init(kind: .nemotron(.english1120), displayName: "nemotron-en"), defaults: defaults))
+        XCTAssertTrue(
+            isModelInUse(.init(kind: .nemotron(.multilingual1120), displayName: "nemotron"), defaults: defaults))
+        XCTAssertFalse(
+            isModelInUse(.init(kind: .nemotron(.english1120), displayName: "nemotron-en"), defaults: defaults))
     }
 
     func testDeleteCommandParsesForceFlag() throws {

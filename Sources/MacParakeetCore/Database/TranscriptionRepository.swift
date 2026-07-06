@@ -63,7 +63,8 @@ extension TranscriptionRepositoryProtocol {
             results = results.filter(\.isFavorite)
         }
         if let searchText = query.searchText?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !searchText.isEmpty {
+            !searchText.isEmpty
+        {
             let normalizedQuery = UnicodeSearch.makeKey(searchText)
             results = results.filter { transcription in
                 transcriptionMatchesLibrarySearch(transcription, normalizedQuery: normalizedQuery)
@@ -146,7 +147,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
 
     public func fetchAll(limit: Int? = nil) throws -> [Transcription] {
         try dbQueue.read { db in
-            var request = Transcription
+            var request =
+                Transcription
                 .order(Transcription.Columns.createdAt.desc)
             if let limit {
                 request = request.limit(limit)
@@ -175,7 +177,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
                 whereClauses.append("isFavorite = 1")
             }
             if let searchText = query.searchText?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !searchText.isEmpty {
+                !searchText.isEmpty
+            {
                 return try Self.fetchUnicodeSearchLibraryPage(
                     db: db,
                     whereClauses: whereClauses,
@@ -248,7 +251,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
 
     public func fetchBySourceType(_ sourceType: Transcription.SourceType, limit: Int? = nil) throws -> [Transcription] {
         try dbQueue.read { db in
-            var request = Transcription
+            var request =
+                Transcription
                 .filter(Transcription.Columns.sourceType == sourceType.rawValue)
                 .order(Transcription.Columns.createdAt.desc)
             if let limit {
@@ -329,7 +333,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
         sourceType: Transcription.SourceType? = nil
     ) throws -> [Transcription] {
         try dbQueue.read { db in
-            var request = Transcription
+            var request =
+                Transcription
                 .filter(Transcription.Columns.filePath == filePath)
                 .order(Transcription.Columns.createdAt.desc)
             if let sourceType {
@@ -364,13 +369,16 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
             guard !trimmed.isEmpty else { return [] }
 
             let normalizedQuery = UnicodeSearch.makeKey(trimmed)
-            let cursor = try Transcription
+            let cursor =
+                try Transcription
                 .order(Transcription.Columns.createdAt.desc)
                 .fetchCursor(db)
 
             var results: [Transcription] = []
             while let transcription = try cursor.next() {
-                guard transcriptionMatchesLibrarySearch(transcription, normalizedQuery: normalizedQuery) else { continue }
+                guard transcriptionMatchesLibrarySearch(transcription, normalizedQuery: normalizedQuery) else {
+                    continue
+                }
 
                 results.append(transcription)
                 if let limit, results.count >= limit {
@@ -386,7 +394,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
         guard !trimmed.isEmpty else { return nil }
 
         // Escape LIKE wildcards (% and _) so video IDs containing _ match literally
-        let escaped = trimmed
+        let escaped =
+            trimmed
             .replacingOccurrences(of: "%", with: "\\%")
             .replacingOccurrences(of: "_", with: "\\_")
 
@@ -490,9 +499,10 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
             guard var transcription = try Transcription.fetchOne(db, key: id) else { return }
             transcription.filePath = filePath
             if transcription.sourceType == .meeting,
-               transcription.meetingArtifactFolderPath == nil,
-               let filePath,
-               let folderPath = Self.artifactFolderPath(forAudioPath: filePath) {
+                transcription.meetingArtifactFolderPath == nil,
+                let filePath,
+                let folderPath = Self.artifactFolderPath(forAudioPath: filePath)
+            {
                 transcription.meetingArtifactFolderPath = folderPath
             }
             transcription.updatedAt = Date()
@@ -503,7 +513,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
     public func updateMeetingArtifactFolderPath(id: UUID, folderPath: String?) throws {
         try dbQueue.write { db in
             guard var transcription = try Transcription.fetchOne(db, key: id),
-                  transcription.sourceType == .meeting else { return }
+                transcription.sourceType == .meeting
+            else { return }
             transcription.meetingArtifactFolderPath = Self.normalizedPath(folderPath)
             transcription.updatedAt = Date()
             try transcription.update(db)
@@ -522,14 +533,16 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
     public func clearStoredAudioPathsForMeetingTranscriptions(under directoryPath: String) throws -> [UUID] {
         try dbQueue.write { db in
             let now = Date()
-            let meetings = try Transcription
+            let meetings =
+                try Transcription
                 .filter(Transcription.Columns.sourceType == Transcription.SourceType.meeting.rawValue)
                 .fetchAll(db)
 
             var clearedIDs: [UUID] = []
             for var transcription in meetings {
                 guard let filePath = transcription.filePath,
-                      Self.isFilePath(filePath, underDirectory: directoryPath) else {
+                    Self.isFilePath(filePath, underDirectory: directoryPath)
+                else {
                     continue
                 }
                 if transcription.meetingArtifactFolderPath == nil {
@@ -579,7 +592,8 @@ public final class TranscriptionRepository: TranscriptionRepositoryProtocol, @un
 
     private static func normalizedPath(_ path: String?) -> String? {
         guard let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty else {
+            !trimmed.isEmpty
+        else {
             return nil
         }
         return URL(fileURLWithPath: trimmed).standardizedFileURL.path

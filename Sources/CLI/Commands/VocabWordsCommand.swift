@@ -55,8 +55,8 @@ struct VocabWordsCommand: AsyncParsableCommand {
                 let all = try repo.fetchAll()
                 let words: [CustomWord]
                 switch source {
-                case .all:     words = all
-                case .manual:  words = all.filter { $0.source == .manual }
+                case .all: words = all
+                case .manual: words = all.filter { $0.source == .manual }
                 case .learned: words = all.filter { $0.source == .learned }
                 }
 
@@ -74,10 +74,15 @@ struct VocabWordsCommand: AsyncParsableCommand {
                 for word in words {
                     let status = word.isEnabled ? "+" : "-"
                     if let replacement = word.replacement?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !replacement.isEmpty {
-                        print("[\(status)] \(word.word) -> \(replacement)  [\(word.source.rawValue)]  (\(word.id.uuidString.prefix(8)))")
+                        !replacement.isEmpty
+                    {
+                        print(
+                            "[\(status)] \(word.word) -> \(replacement)  [\(word.source.rawValue)]  (\(word.id.uuidString.prefix(8)))"
+                        )
                     } else {
-                        print("[\(status)] \(word.word) (anchor)  [\(word.source.rawValue)]  (\(word.id.uuidString.prefix(8)))")
+                        print(
+                            "[\(status)] \(word.word) (anchor)  [\(word.source.rawValue)]  (\(word.id.uuidString.prefix(8)))"
+                        )
                     }
                 }
                 print("\n\(words.count) word(s)")
