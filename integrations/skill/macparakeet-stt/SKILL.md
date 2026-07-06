@@ -24,6 +24,10 @@ already have a signed yt-dlp helper seed; if `yt-dlp` is still missing and the
 user wants media URL transcription, run
 `macparakeet-cli health --repair-binaries` before retrying.
 
+If `database.status` is `schema_skew`, the shared database was migrated by a
+newer MacParakeet app than this CLI build understands. Tell the user to
+upgrade `macparakeet-cli`, then stop; do not treat it as a database fault.
+
 ## Core Commands
 
 ```bash

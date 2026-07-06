@@ -148,6 +148,11 @@ yt-dlp helper seed for YouTube transcription; use
 `macparakeet-cli health --repair-binaries` when you explicitly want to fetch
 the latest managed helper binary.
 
+`database.status` is one of `ok`, `missing`, `schema_skew`, or `error`.
+`schema_skew` means the shared database was migrated by a newer MacParakeet
+app than this CLI build understands; upgrade `macparakeet-cli` and retry
+rather than treating it as a database fault.
+
 ### Transcribe a file
 
 ```bash
