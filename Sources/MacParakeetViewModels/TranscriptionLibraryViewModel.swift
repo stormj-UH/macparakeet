@@ -540,6 +540,12 @@ public final class TranscriptionLibraryViewModel {
     private func refreshLoadedTranscription(id: UUID) throws {
         guard let repo = transcriptionRepo else { return }
         guard let index = transcriptions.firstIndex(where: { $0.id == id }) else { return }
+        // An in-flight load would later publish a snapshot fetched before this
+        // refresh, resurrecting the row's pre-retry status. Invalidate it; the
+        // generation bump makes any late publish a no-op.
+        if loadTask != nil {
+            cancelActiveLoad()
+        }
         guard let refreshed = try repo.fetch(id: id) else {
             removeLoadedTranscriptions(withIDs: [id])
             return
