@@ -149,9 +149,8 @@ struct MeetingRowCard<MenuContent: View>: View {
                 .truncationMode(.tail)
         } else if transcription.status == .processing {
             HStack(spacing: 5) {
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.55)
+                ParakeetSpinner(.inline)
+                    .scaleEffect(0.85)
                     .frame(width: 12, height: 12)
                 Text(statusLine("Transcribing"))
                     .font(DesignSystem.Typography.bodySmall)
@@ -233,9 +232,8 @@ struct MeetingRowCard<MenuContent: View>: View {
         } label: {
             HStack(spacing: 5) {
                 if isRetrying {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.55)
+                    ParakeetSpinner(.inline)
+                        .scaleEffect(0.85)
                         .frame(width: 12, height: 12)
                 } else {
                     Image(systemName: "arrow.clockwise")
