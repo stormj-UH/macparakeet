@@ -25,18 +25,22 @@ struct MeetingRecordingTile: View {
         .contentShape(RoundedRectangle(cornerRadius: DesignSystem.Layout.dropZoneCornerRadius))
         .onHover { isHovered = $0 }
         .onTapGesture {
-            // Only fire onTap in states the tile signals as interactive
-            // (idle/recording). Transcribing/completing/completed/error stay
-            // inert so users don't get a no-op tap on a disabled-looking tile.
-            guard interactive else { return }
+            // Only the idle state's whole tile is a tap target (to start).
+            // During recording, the explicit two-step Stop button is the only
+            // way to end so accidental body taps can't terminate a meeting.
+            // Transcribing/completing/completed/error stay inert.
+            guard tileTappable else { return }
             onTap()
         }
-        .scaleEffect(isHovered && interactive ? 1.005 : 1.0)
+        .scaleEffect(isHovered && tileTappable ? 1.005 : 1.0)
         .animation(DesignSystem.Animation.hoverTransition, value: isHovered)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
+        .accessibilityElement(children: tileTappable ? .combine : .contain)
+        .accessibilityAddTraits(tileTappable ? .isButton : [])
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(accessibilityHint)
+        .accessibilityAction(named: "Stop recording") {
+            if case .recording = viewModel.state { onTap() }
+        }
     }
 
     // MARK: - Background
@@ -48,7 +52,7 @@ struct MeetingRecordingTile: View {
                 RoundedRectangle(cornerRadius: DesignSystem.Layout.dropZoneCornerRadius)
                     .strokeBorder(borderColor, lineWidth: 0.6)
             )
-            .cardShadow(isHovered && interactive ? DesignSystem.Shadows.cardHover : DesignSystem.Shadows.cardRest)
+            .cardShadow(isHovered && tileTappable ? DesignSystem.Shadows.cardHover : DesignSystem.Shadows.cardRest)
             .animation(DesignSystem.Animation.hoverTransition, value: isHovered)
     }
 
@@ -235,33 +239,17 @@ struct MeetingRecordingTile: View {
     }
 
     private var stopButton: some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(.white)
-                    .frame(width: 8, height: 8)
-                Text("Stop")
-                    .font(DesignSystem.Typography.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                Capsule().fill(DesignSystem.Colors.recordingRed)
-            )
-        }
-        .buttonStyle(.plain)
-        .help("Stop recording")
-        .accessibilityLabel("Stop recording")
+        StopConfirmCapsule(onStop: onTap)
     }
 
     // MARK: - Interactivity
 
-    private var interactive: Bool {
-        switch viewModel.state {
-        case .idle, .recording: return true
-        case .completing, .transcribing, .completed, .error: return false
-        }
+    /// Whole-tile tap target. Only the idle state acts as a button; recording
+    /// requires the explicit two-step Stop button so accidental body taps
+    /// can't end a meeting. Transcribing/completed/error are informational.
+    private var tileTappable: Bool {
+        if case .idle = viewModel.state { return true }
+        return false
     }
 
     private var accessibilityLabel: String {
@@ -285,6 +273,101 @@ struct MeetingRecordingTile: View {
         case .recording: return "Stops the active recording and starts transcription."
         default: return ""
         }
+    }
+}
+
+// MARK: - Stop Confirm Capsule (two-step end)
+
+/// Two-step end button for the tile's recording state. First click expands
+/// the red capsule into "End now" with a 3-second countdown drain; second
+/// click stops the recording. Reverts to "Stop" if no second click. Mirrors
+/// the floating pill's `StopRecordingButton` UX with polish tuned for the
+/// larger, light-surface tile (white-on-red filled capsule rather than the
+/// pill's red-on-dark outline style).
+private struct StopConfirmCapsule: View {
+    var onStop: () -> Void
+
+    @State private var confirming = false
+    @State private var countdownProgress: CGFloat = 1.0
+    @State private var revertTask: Task<Void, Never>?
+    @State private var isHovered = false
+
+    var body: some View {
+        Group {
+            if confirming {
+                Button(action: confirm) {
+                    Text("End now")
+                        .font(DesignSystem.Typography.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(
+                            ZStack {
+                                Capsule().fill(DesignSystem.Colors.recordingRed)
+                                GeometryReader { geo in
+                                    Capsule()
+                                        .fill(.white.opacity(0.22))
+                                        .frame(width: geo.size.width * countdownProgress)
+                                }
+                                .clipShape(Capsule())
+                            }
+                        )
+                        .overlay(
+                            Capsule().stroke(.white.opacity(0.30), lineWidth: 0.6)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("End recording now")
+                .accessibilityLabel("Confirm end recording")
+                .transition(.scale(scale: 0.92).combined(with: .opacity))
+            } else {
+                Button(action: beginConfirmation) {
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(.white)
+                            .frame(width: 8, height: 8)
+                        Text("Stop")
+                            .font(DesignSystem.Typography.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Capsule().fill(DesignSystem.Colors.recordingRed))
+                    .scaleEffect(isHovered ? 1.03 : 1.0)
+                    .animation(.easeOut(duration: 0.15), value: isHovered)
+                }
+                .buttonStyle(.plain)
+                .onHover { isHovered = $0 }
+                .help("Stop recording")
+                .accessibilityLabel("Stop recording")
+                .transition(.scale(scale: 0.92).combined(with: .opacity))
+            }
+        }
+        .onDisappear { revertTask?.cancel() }
+    }
+
+    private func beginConfirmation() {
+        countdownProgress = 1.0
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            confirming = true
+        }
+        withAnimation(.linear(duration: 3)) {
+            countdownProgress = 0
+        }
+        revertTask?.cancel()
+        revertTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                confirming = false
+            }
+        }
+    }
+
+    private func confirm() {
+        revertTask?.cancel()
+        confirming = false
+        onStop()
     }
 }
 
