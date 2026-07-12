@@ -1,18 +1,19 @@
 # ADR-024: Activity-Based Meeting Detection
 
-> Status: **PARTIAL IMPLEMENTATION** — Phases A+B ship the default-off CoreAudio
+> Status: **PARTIAL IMPLEMENTATION** — Phases A-C ship the default-off CoreAudio
 > process attribution collector, CoreMediaIO camera activity collector, shared
-> activity snapshot types, app registry, detection mode, and pure detector tests.
-> Coordinator/UI wiring, prompt/auto-start telemetry, and ADR-023 auto-stop
-> attribution remain proposed until later phases flip
-> `AppFeatures.meetingActivityDetectionEnabled`.
+> activity snapshot types, app registry, detection mode, pure detector tests,
+> prompt coordinator, Settings surface, prompt UI, and prompt telemetry contract.
+> Opt-in auto-start and ADR-023 auto-stop attribution remain proposed until later
+> phases flip `AppFeatures.meetingActivityDetectionEnabled`.
 > Default off / opt-in.
 > Date: 2026-06-14
 > Related: ADR-002 (local-first), ADR-014 (meeting recording), ADR-015
 > (concurrent dictation/meeting), ADR-017 (calendar auto-start), ADR-023
 > (activity-based meeting auto-stop — authored in parallel; consumes the same
 > activity-signal layer this ADR builds).
-> Requirement: REQ-MEET-016 (v0.7, Phases A+B foundation implemented).
+> Requirement: REQ-MEET-016 (v0.7, Phases A-C prompt path implemented behind
+> default-off flag).
 
 ## Context
 
@@ -449,14 +450,16 @@ Privacy-safe, coarse, no raw app names beyond the allowlist enum:
 1. **Phase A — Audio-process attribution + pure detector (foundation).**
    `AudioProcessActivityCollector` (with self-exclusion), `MeetingAppRegistry`,
    the `MeetingActivityDetector` skeleton (app-signal path only, no camera yet),
-   and table tests. Flag stays off; no UI. Verifiable headlessly.
+   and table tests. Implemented 2026-06-14 behind the default-off flag.
 2. **Phase B — Camera collector + full fusion rule.** `CameraActivityCollector`,
    wire camera into `ActivitySignalSnapshot`, the full fusion rule + graduated
-   trust tiers + self-exclusion across both signal types. More table tests.
+   trust tiers + self-exclusion across both signal types. Implemented
+   2026-06-14 behind the default-off flag.
 3. **Phase C — Prompt + settings + coordinator wiring.** The
    `MeetingActivityDetectionCoordinator`, the "Record this meeting?" prompt,
    the `.prompt` settings mode, dwell + suppression + debounce, telemetry +
-   website allowlist mirror. First user-visible (flag-on) slice.
+   website allowlist mirror. Implemented 2026-06-14 behind the default-off flag
+   as the first code-complete prompt slice.
 4. **Phase D — `.autoStart` mode + ADR-023 auto-stop feed.** Opt-in
    auto-record-on-detect via the reused countdown toast, and expose
    `ActivitySignalSnapshot` to ADR-023's auto-stop consumer (the "meeting still
@@ -465,24 +468,26 @@ Privacy-safe, coarse, no raw app names beyond the allowlist enum:
 Flag-on (any tagged release) is a separate decision after Phase C/D land and a
 focused false-positive + idle-CPU pass clears.
 
-## Open Questions
+## Phase C defaults and remaining open questions
+
+Phase C resolves the trust-sensitive defaults for the prompt slice:
+
+- Candidate dwell: 3 seconds.
+- Decline cooldown: 30 minutes per `MeetingIdentity`.
+- Recommended enabled mode: `.prompt`. The preference still defaults to `.off`,
+  and hand-edited `.autoStart` is clamped to prompt until Phase D adds the
+  cancellable countdown path.
+- Browser URL recognition: the coordinator has an injected metadata provider
+  and uses `MeetingLinkParser`, but the default runtime path does not query
+  browser active-tab URLs via AppleScript/Automation. Browser detection is
+  therefore frontmost-browser + mic until a no-new-permission metadata path is
+  validated.
 
 - **Identity granularity for suppression.** What defines one "meeting" for the
   decline-cooldown? Recognized-app + a coarse session boundary (mic-active span)
   is the metadata-only candidate — is that stable enough that "Not now" reliably
   suppresses the *same* call without bleeding into the next one an hour later?
-- **Cooldown length.** How long after a decline before we'd re-offer the same
-  identity? Short enough to catch a genuinely new call on the same app; long
-  enough never to feel like nagging. Needs a default to pick.
-- **`.prompt` vs `.autoStart` as the recommended on-state.** Is the gentle
-  prompt enough value to be the headline, with `.autoStart` as power-user depth,
-  or does the prompt's interruption undercut the "I forgot" win? Lean prompt
-  for v1; revisit from telemetry.
 - **Relationship to calendar auto-start when both fire.** If a calendar event
   *and* an activity signal both point at the same live meeting, which surface
   wins, and how do we de-dupe so the user sees one prompt, not two? (First-to-
   arrive wins + a short cross-suppression window is the leaning answer.)
-- **Browser meeting-URL detection without screen access.** Recognizing a Meet/
-  Teams tab needs the active tab URL. Is there a metadata-only path (e.g. the
-  frontmost window's accessibility-exposed URL) that stays within the no-content
-  invariant, or do browsers stay limited to "frontmost + mic" until one exists?

@@ -1128,6 +1128,25 @@ struct SettingsView: View {
                     )
                 }
 
+                if AppFeatures.meetingActivityDetectionEnabled {
+                    Divider()
+
+                    HStack(alignment: .center) {
+                        rowText(
+                            title: "Ad-hoc call detection",
+                            detail: "Offer to record when microphone and meeting activity are detected."
+                        )
+                        Spacer(minLength: DesignSystem.Spacing.md)
+                        Picker("Ad-hoc call detection", selection: $viewModel.meetingActivityDetectionMode) {
+                            Text("Off").tag(MeetingActivityDetectionMode.off)
+                            Text("Ask before recording").tag(MeetingActivityDetectionMode.prompt)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(minWidth: 220, idealWidth: 260, maxWidth: 320)
+                    }
+                }
+
                 if viewModel.pendingMeetingRecoveryCount > 0 {
                     Divider()
 

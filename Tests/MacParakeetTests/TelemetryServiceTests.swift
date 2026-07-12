@@ -921,6 +921,84 @@ final class TelemetryServiceTests: XCTestCase {
         XCTAssertEqual(props["error_type"], "permission_denied")
     }
 
+    func testMeetingActivityDetectionTelemetrySerializesCoarsePropsOnly() throws {
+        let event = TelemetryEvent(
+            spec: .meetingActivityDetectionShown(
+                signalSource: .app,
+                appCategory: .dedicated
+            ),
+            appVer: "0.4.2",
+            osVer: "15.3",
+            locale: "en-US",
+            chip: "Apple M1",
+            session: "test-session"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let data = try encoder.encode(event)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let props = try XCTUnwrap(json["props"] as? [String: String])
+
+        XCTAssertEqual(json["event"] as? String, "meeting_activity_detection_shown")
+        XCTAssertEqual(props["signal_source"], "app")
+        XCTAssertEqual(props["app_category"], "dedicated")
+        XCTAssertNil(props["bundle_id"])
+        XCTAssertNil(props["app_name"])
+    }
+
+    func testMeetingRecordingStartedSerializesActivityDetectionTrigger() throws {
+        let event = TelemetryEvent(
+            spec: .meetingRecordingStarted(trigger: .activityDetection),
+            appVer: "0.4.2",
+            osVer: "15.3",
+            locale: "en-US",
+            chip: "Apple M1",
+            session: "test-session"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let data = try encoder.encode(event)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let props = try XCTUnwrap(json["props"] as? [String: String])
+
+        XCTAssertEqual(json["event"] as? String, "meeting_recording_started")
+        XCTAssertEqual(props["trigger"], "activity_detection")
+    }
+
+    func testMeetingOperationSerializesActivityDetectionTrigger() throws {
+        let event = TelemetryEvent(
+            spec: .meetingOperation(
+                operationID: "op-meeting",
+                outcome: .success,
+                trigger: .activityDetection,
+                durationSeconds: 42,
+                liveWordCount: 120,
+                liveTranscriptLagged: false,
+                microphoneTrackPresent: true,
+                systemTrackPresent: true,
+                notesUsed: false,
+                notesLengthBucket: nil,
+                errorType: nil
+            ),
+            appVer: "0.4.2",
+            osVer: "15.3",
+            locale: "en-US",
+            chip: "Apple M1",
+            session: "test-session"
+        )
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let data = try encoder.encode(event)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let props = try XCTUnwrap(json["props"] as? [String: String])
+
+        XCTAssertEqual(json["event"] as? String, "meeting_operation")
+        XCTAssertEqual(props["trigger"], "activity_detection")
+    }
+
     func testDictationOperationDoesNotSerializeDeviceNameOrUID() throws {
         let device = RecordingDeviceInfo(
             deviceName: "Alice's Custom Microphone",
@@ -1557,6 +1635,9 @@ final class TelemetryServiceTests: XCTestCase {
             .meetingAutoStopProposed(reason: .meetingAppClosed),
             .meetingAutoStopConfirmed(reason: .meetingAppClosed),
             .meetingAutoStopVetoed(reason: .prolongedSilence),
+            .meetingActivityDetectionShown(signalSource: .app, appCategory: .dedicated),
+            .meetingActivityDetectionAccepted(signalSource: .camera, appCategory: .unknown),
+            .meetingActivityDetectionDeclined(signalSource: .app, appCategory: .browser),
             .micStallDetected(signature: .micMissing, elapsedMs: 3_000),
             .vadModelPrep(outcome: .prepared),
             .errorOccurred(domain: "STTError", code: "engineFailed", description: "test"),

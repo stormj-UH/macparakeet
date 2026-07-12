@@ -36,4 +36,8 @@ public extension Notification.Name {
     /// changes. The coordinator re-reads the opt-in toggle immediately so
     /// disabling it tears down observers/countdowns without waiting.
     static let macParakeetMeetingAutoStopDidChange = Notification.Name("macparakeet.meetingAutoStopDidChange")
+    /// Posted when ADR-024 activity-based meeting detection settings change.
+    /// The coordinator re-reads the mode immediately so `.off` tears down
+    /// CoreAudio/CoreMediaIO listeners without waiting for another signal.
+    static let macParakeetMeetingActivitySettingsDidChange = Notification.Name("macparakeet.meetingActivitySettingsDidChange")
 }

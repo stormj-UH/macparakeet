@@ -159,6 +159,7 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.meetingHotkeyTrigger, .chord(modifiers: ["command", "shift"], keyCode: 46))
         XCTAssertEqual(viewModel.meetingAudioSourceMode, .microphoneAndSystem)
         XCTAssertFalse(viewModel.meetingAutoStopEnabled, "meeting auto-stop should default to false")
+        XCTAssertEqual(viewModel.meetingActivityDetectionMode, .off, "meeting activity detection should default to off")
         XCTAssertEqual(
             viewModel.selectedMicrophoneDeviceUID,
             SettingsViewModel.systemDefaultMicrophoneSelection,
@@ -193,6 +194,10 @@ final class SettingsViewModelTests: XCTestCase {
             forKey: UserDefaultsAppRuntimePreferences.meetingAudioSourceModeKey
         )
         testDefaults.set(true, forKey: UserDefaultsAppRuntimePreferences.meetingAutoStopEnabledKey)
+        testDefaults.set(
+            MeetingActivityDetectionMode.prompt.rawValue,
+            forKey: MeetingActivityDetectionPreferences.modeKey
+        )
         testDefaults.set(true, forKey: UserDefaultsAppRuntimePreferences.pauseMediaDuringDictationKey)
         testDefaults.set(true, forKey: UserDefaultsAppRuntimePreferences.instantDictationEnabledKey)
         testDefaults.set(false, forKey: UserDefaultsAppRuntimePreferences.showLiveDictationPreviewKey)
@@ -217,6 +222,7 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(vm.selectedMicrophoneDeviceUID, "usb-mic-uid")
         XCTAssertEqual(vm.meetingAudioSourceMode, .systemOnly)
         XCTAssertTrue(vm.meetingAutoStopEnabled)
+        XCTAssertEqual(vm.meetingActivityDetectionMode, .prompt)
         XCTAssertTrue(vm.pauseMediaDuringDictation)
         XCTAssertTrue(vm.instantDictationEnabled)
         XCTAssertFalse(vm.showLiveDictationPreview)
@@ -249,6 +255,40 @@ final class SettingsViewModelTests: XCTestCase {
             return setting
         }
         XCTAssertEqual(settings, [.meetingAutoStop, .meetingAutoStop])
+    }
+
+    func testMeetingActivityDetectionPersistsEmitsTelemetryAndPostsNotification() {
+        let telemetry = SettingsTelemetrySpy()
+        Telemetry.configure(telemetry)
+        var notificationCount = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: .macParakeetMeetingActivitySettingsDidChange,
+            object: nil,
+            queue: nil
+        ) { _ in
+            notificationCount += 1
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        viewModel.meetingActivityDetectionMode = .prompt
+
+        XCTAssertEqual(
+            testDefaults.string(forKey: MeetingActivityDetectionPreferences.modeKey),
+            MeetingActivityDetectionMode.prompt.rawValue
+        )
+
+        viewModel.meetingActivityDetectionMode = .off
+
+        XCTAssertEqual(
+            testDefaults.string(forKey: MeetingActivityDetectionPreferences.modeKey),
+            MeetingActivityDetectionMode.off.rawValue
+        )
+        XCTAssertEqual(notificationCount, 2)
+        let settings = telemetry.snapshot().compactMap { event -> TelemetrySettingName? in
+            guard case .settingChanged(let setting) = event else { return nil }
+            return setting
+        }
+        XCTAssertEqual(settings, [.meetingActivityDetectionMode, .meetingActivityDetectionMode])
     }
 
     func testPauseMediaDuringDictationPersistsAndEmitsTelemetry() {

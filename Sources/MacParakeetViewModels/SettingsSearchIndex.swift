@@ -84,6 +84,7 @@ public enum SettingsSearchIndex {
     private static let meetingGatedIds: Set<String> = [
         "meeting",
         "meeting.autoStop",
+        "meeting.activityDetection",
         "meeting.calendar",
         "system.permissions.screen"
     ]
@@ -101,6 +102,11 @@ public enum SettingsSearchIndex {
         "meeting.autoStop"
     ]
 
+    /// Ids gated on ADR-024's staged activity-detection flag.
+    private static let meetingActivityDetectionGatedIds: Set<String> = [
+        "meeting.activityDetection"
+    ]
+
     public static let entries: [SettingsSearchEntry] = {
         var result = allEntries
         if !AppFeatures.meetingRecordingEnabled {
@@ -111,6 +117,9 @@ public enum SettingsSearchIndex {
         }
         if !AppFeatures.meetingAutoStopEnabled {
             result = result.filter { !meetingAutoStopGatedIds.contains($0.id) }
+        }
+        if !AppFeatures.meetingActivityDetectionEnabled {
+            result = result.filter { !meetingActivityDetectionGatedIds.contains($0.id) }
         }
         return result
     }()
@@ -238,6 +247,17 @@ public enum SettingsSearchIndex {
             title: "Auto-stop meetings",
             subtitle: "in Meeting Recording",
             keywords: ["auto stop", "auto-stop", "stop recording", "meeting ended", "silence", "zoom closed"],
+            cardAnchor: "meeting"
+        ),
+        SettingsSearchEntry(
+            id: "meeting.activityDetection",
+            tab: .capture,
+            title: "Ad-hoc call detection",
+            subtitle: "in Meeting Recording",
+            keywords: [
+                "activity detection", "meeting detection", "detect meetings", "ad-hoc calls",
+                "record this meeting", "zoom", "teams", "slack", "facetime", "camera"
+            ],
             cardAnchor: "meeting"
         ),
 

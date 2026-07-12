@@ -1,15 +1,17 @@
 # Activity-Based Meeting Detection
 
-**Status:** IN PROGRESS — Phases A+B implemented 2026-06-14 behind
-`AppFeatures.meetingActivityDetectionEnabled = false`. No user-visible behavior
-ships until later phases add coordinator/UI wiring and the flag is validated.
+**Status:** IN PROGRESS — Phases A-C implemented 2026-06-14 behind
+`AppFeatures.meetingActivityDetectionEnabled = false`. Phase C adds the
+coordinator, Settings surface, prompt UI, and telemetry contract; no user-visible
+behavior ships until the flag is validated and flipped.
 **Date:** 2026-06-14
 **ADRs:** ADR-024 (activity-based meeting detection — the decision this plan
 implements). Related: ADR-002 (local-first), ADR-014 (meeting recording),
 ADR-015 (concurrent dictation/meeting), ADR-017 (calendar auto-start — the
 coordinator/pure-evaluator pattern to mirror), ADR-023 (activity-based
 auto-stop — consumes the same signal layer this plan builds).
-**Requirement:** REQ-MEET-016 (v0.7, Phases A+B foundation implemented).
+**Requirement:** REQ-MEET-016 (v0.7, Phases A-C prompt path implemented behind
+default-off flag).
 
 ## What this plan closes out
 
@@ -114,13 +116,13 @@ change (flag off, no coordinator).
 **Ship criteria:** `swift test` green. Full fusion matrix covered by table tests.
 Still flag-off / no UI.
 
-### Phase C — Prompt state machine + settings + coordinator wiring (first flag-on slice)
+### Phase C — Prompt state machine + settings + coordinator wiring (first flag-on slice) — implemented 2026-06-14 behind default-off flag
 
 | File | Change |
 |------|--------|
 | `Sources/MacParakeetViewModels/SettingsViewModel.swift` | New `meetingActivityDetectionMode: MeetingActivityDetectionMode` persisted under a `MeetingActivityDetection.*` `UserDefaults` namespace. `didSet` posts the new notification + `Telemetry.send(.settingChanged(setting: .meetingActivityDetectionMode))`. Mirror the `calendarAutoStartMode` block exactly. |
 | `Sources/MacParakeetCore/AppNotifications.swift` | Add `macParakeetMeetingActivitySettingsDidChange`. |
-| `Sources/MacParakeet/App/MeetingActivityDetectionCoordinator.swift` *(new)* | `@MainActor`. Owns both collectors; subscribes to settings + `NSWorkspace` (frontmost-app / wake) notifications via `NSWorkspace.shared.notificationCenter`; debounced refresh on a `RunLoop.common` timer; reentrancy/coalescing guard; `testHook_` seam. Builds `ActivitySignalSnapshot`, calls `MeetingActivityDetector.evaluate(...)`, holds `candidateSince` + `suppressedIdentities`, drives the prompt. Routes confirm → `MeetingRecordingFlowCoordinator.startRecording(trigger: .activityDetection)`; no-ops when a recording is already active. Tears down collectors when mode is `.off` / a recording is active / no mic in use. |
+| `Sources/MacParakeet/App/MeetingActivityDetectionCoordinator.swift` *(new)* | `@MainActor`. Owns both collectors; subscribes to settings + `NSWorkspace` (frontmost-app / wake) notifications via `NSWorkspace.shared.notificationCenter`; debounced refresh on a `RunLoop.common` timer; reentrancy/coalescing guard; `testHook_` seam. Builds `ActivitySignalSnapshot`, calls `MeetingActivityDetector.evaluate(...)`, holds `candidateSince` + `suppressedIdentities`, drives the prompt. Routes confirm → `MeetingRecordingFlowCoordinator.startRecording(trigger: .activityDetection)`; no-ops when a recording is already active. Tears down collectors when mode is `.off` / a recording is active; camera observation is started only while a non-self mic holder exists. |
 | `Sources/MacParakeet/Views/MeetingRecording/MeetingActivityPromptController.swift` *(new)* | Non-activating `KeylessPanel` "Record this meeting?" prompt with Record / Not now. "Not now" suppresses the current `MeetingIdentity` for the cooldown. |
 | `Sources/MacParakeet/App/AppEnvironmentConfigurer.swift` | Construct + `.start()` the coordinator behind `AppFeatures.meetingActivityDetectionEnabled` (only when `meetingRecordingEnabled` is also true), where `MeetingAutoStartCoordinator` is wired. Add to `Runtime`. |
 | `Sources/MacParakeet/App/MeetingRecordingFlowCoordinator.swift` | Add `.activityDetection` to `TelemetryMeetingRecordingTrigger`; thread through `startRecording(trigger:)` like `.calendarAutoStart`. |
@@ -129,7 +131,7 @@ Still flag-off / no UI.
 | `../macparakeet-website/functions/api/telemetry.ts` | **Mirror every new `TelemetryEventName` into `ALLOWED_EVENTS`.** Deploy before shipping a flag-on build (the Worker rejects the whole batch on an unknown event). |
 | `Tests/MacParakeetTests/MeetingDetection/MeetingActivityDetectionCoordinatorTests.swift` *(new)* | Mirror `MeetingAutoStartCoordinatorTests`: active recording suppresses the prompt; decline suppresses the same identity for cooldown; mode `.off` tears collectors down; debounce coalesces bursts; confirm routes to the flow coordinator with `.activityDetection`. |
 
-**Ship criteria:** End-to-end with flag on locally: starting a Zoom/Teams call
+**Ship criteria:** Code complete and test-covered behind the flag. End-to-end with flag on locally: starting a Zoom/Teams call
 (mic + camera) surfaces a "Record this meeting?" prompt after the dwell; Record
 starts a recording with `trigger=activity_detection`; Not now suppresses that
 call; a plain video play / Photo Booth does NOT prompt. Idle CPU delta ~0%

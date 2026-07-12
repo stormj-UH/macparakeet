@@ -202,6 +202,17 @@ public final class SettingsViewModel {
             Telemetry.send(.settingChanged(setting: .meetingAutoStop))
         }
     }
+    public var meetingActivityDetectionMode: MeetingActivityDetectionMode {
+        didSet {
+            defaults.set(
+                meetingActivityDetectionMode.rawValue,
+                forKey: MeetingActivityDetectionPreferences.modeKey
+            )
+            guard !isResolvingMeetingActivitySettings else { return }
+            NotificationCenter.default.post(name: .macParakeetMeetingActivitySettingsDidChange, object: nil)
+            Telemetry.send(.settingChanged(setting: .meetingActivityDetectionMode))
+        }
+    }
     public var pauseMediaDuringDictation: Bool {
         didSet {
             defaults.set(
@@ -603,9 +614,11 @@ public final class SettingsViewModel {
     @ObservationIgnored nonisolated(unsafe) private var microphoneTestTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var storageStatsTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var calendarSettingsObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var meetingActivitySettingsObserver: NSObjectProtocol?
     /// Re-entrancy guard so `observeCalendarSettings()` doesn't fire `didSet`
     /// → notification → re-resolve → `didSet` → … on every user toggle.
     private var isResolvingCalendarSettings = false
+    private var isResolvingMeetingActivitySettings = false
     private let logger = Logger(subsystem: "com.macparakeet.viewmodels", category: "SettingsViewModel")
 
     public init(
@@ -686,6 +699,7 @@ public final class SettingsViewModel {
         meetingAutoStopEnabled = defaults.object(
             forKey: UserDefaultsAppRuntimePreferences.meetingAutoStopEnabledKey
         ) as? Bool ?? false
+        meetingActivityDetectionMode = Self.resolveMeetingActivityDetectionMode(defaults: defaults)
         pauseMediaDuringDictation = defaults.object(
             forKey: UserDefaultsAppRuntimePreferences.pauseMediaDuringDictationKey
         ) as? Bool ?? false
@@ -746,6 +760,7 @@ public final class SettingsViewModel {
 
         refreshMicrophoneDevices()
         observeCalendarSettings()
+        observeMeetingActivitySettings()
     }
 
     deinit {
@@ -754,6 +769,9 @@ public final class SettingsViewModel {
         storageStatsTask?.cancel()
         if let calendarSettingsObserver {
             NotificationCenter.default.removeObserver(calendarSettingsObserver)
+        }
+        if let meetingActivitySettingsObserver {
+            NotificationCenter.default.removeObserver(meetingActivitySettingsObserver)
         }
     }
 
@@ -795,10 +813,40 @@ public final class SettingsViewModel {
         if calendarExcludedIdentifiers != resolvedExcluded { calendarExcludedIdentifiers = resolvedExcluded }
     }
 
+    private func observeMeetingActivitySettings() {
+        let center = NotificationCenter.default
+        meetingActivitySettingsObserver = center.addObserver(
+            forName: .macParakeetMeetingActivitySettingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.reloadMeetingActivitySettings() }
+        }
+    }
+
+    private func reloadMeetingActivitySettings() {
+        guard !isResolvingMeetingActivitySettings else { return }
+        isResolvingMeetingActivitySettings = true
+        defer { isResolvingMeetingActivitySettings = false }
+
+        let resolvedMode = Self.resolveMeetingActivityDetectionMode(defaults: defaults)
+        if meetingActivityDetectionMode != resolvedMode {
+            meetingActivityDetectionMode = resolvedMode
+        }
+    }
+
     private static func resolveCalendarAutoStartMode(defaults: UserDefaults) -> CalendarAutoStartMode {
         guard let raw = defaults.string(forKey: CalendarAutoStartPreferences.modeKey),
               let mode = CalendarAutoStartMode(rawValue: raw) else {
             return .off  // Off by default — opt-in only via onboarding or Settings.
+        }
+        return mode
+    }
+
+    private static func resolveMeetingActivityDetectionMode(defaults: UserDefaults) -> MeetingActivityDetectionMode {
+        guard let raw = defaults.string(forKey: MeetingActivityDetectionPreferences.modeKey),
+              let mode = MeetingActivityDetectionMode(rawValue: raw) else {
+            return .off
         }
         return mode
     }

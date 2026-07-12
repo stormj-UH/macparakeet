@@ -68,3 +68,10 @@ public enum CalendarAutoStartPreferences {
 
     public static let defaultReminderMinutes = 5
 }
+
+/// Activity-based meeting detection preferences (ADR-024). Namespaced so the
+/// rollout toggle stays grep-able and test suites can clear it without touching
+/// unrelated runtime settings.
+public enum MeetingActivityDetectionPreferences {
+    public static let modeKey = "MeetingActivityDetection.mode"
+}

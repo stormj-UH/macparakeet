@@ -110,6 +110,9 @@ public enum TelemetryEventName: String, Sendable, CaseIterable {
     case meetingAutoStopProposed = "meeting_auto_stop_proposed"
     case meetingAutoStopConfirmed = "meeting_auto_stop_confirmed"
     case meetingAutoStopVetoed = "meeting_auto_stop_vetoed"
+    case meetingActivityDetectionShown = "meeting_activity_detection_shown"
+    case meetingActivityDetectionAccepted = "meeting_activity_detection_accepted"
+    case meetingActivityDetectionDeclined = "meeting_activity_detection_declined"
     case micStallDetected = "mic_stall_detected"
     /// Universal launch-time Silero VAD model prep for VAD-guided meeting live
     /// chunking (`plans/completed/2026-05-meeting-vad-guided-live-chunking.md` §6).
@@ -370,6 +373,7 @@ public enum TelemetryMeetingRecordingTrigger: String, Sendable, Equatable {
     case manual
     case hotkey
     case calendarAutoStart = "calendar_auto_start"
+    case activityDetection = "activity_detection"
 }
 
 /// Why a full meeting recording operation moved through its lifecycle. This is
@@ -378,6 +382,7 @@ public enum TelemetryMeetingOperationTrigger: String, Sendable, Equatable {
     case manual
     case hotkey
     case calendarAutoStart = "calendar_auto_start"
+    case activityDetection = "activity_detection"
     case autoStop = "auto_stop"
 
     public init(_ trigger: TelemetryMeetingRecordingTrigger) {
@@ -388,6 +393,8 @@ public enum TelemetryMeetingOperationTrigger: String, Sendable, Equatable {
             self = .hotkey
         case .calendarAutoStart:
             self = .calendarAutoStart
+        case .activityDetection:
+            self = .activityDetection
         }
     }
 }
@@ -395,6 +402,18 @@ public enum TelemetryMeetingOperationTrigger: String, Sendable, Equatable {
 public enum TelemetryMeetingAutoStopReason: String, Sendable, Equatable {
     case meetingAppClosed = "meeting_app_closed"
     case prolongedSilence = "prolonged_silence"
+}
+
+public enum TelemetryMeetingActivitySignalSource: String, Sendable, Equatable {
+    case app
+    case camera
+}
+
+public enum TelemetryMeetingActivityAppCategory: String, Sendable, Equatable {
+    case dedicated
+    case chat
+    case browser
+    case unknown
 }
 
 public enum TelemetryMicStallSignature: String, Sendable, Equatable {
@@ -498,6 +517,7 @@ public enum TelemetrySettingName: String, Sendable, Equatable {
     case microphoneSelection = "microphone_selection"
     case meetingAudioSourceMode = "meeting_audio_source_mode"
     case meetingAutoStop = "meeting_auto_stop"
+    case meetingActivityDetectionMode = "meeting_activity_detection_mode"
     case pauseMediaDuringDictation = "pause_media_during_dictation"
     case instantDictation = "instant_dictation"
     case liveDictationPreview = "live_dictation_preview"
@@ -823,6 +843,18 @@ public enum TelemetryEventSpec: Sendable {
     case meetingAutoStopProposed(reason: TelemetryMeetingAutoStopReason)
     case meetingAutoStopConfirmed(reason: TelemetryMeetingAutoStopReason)
     case meetingAutoStopVetoed(reason: TelemetryMeetingAutoStopReason)
+    case meetingActivityDetectionShown(
+        signalSource: TelemetryMeetingActivitySignalSource,
+        appCategory: TelemetryMeetingActivityAppCategory
+    )
+    case meetingActivityDetectionAccepted(
+        signalSource: TelemetryMeetingActivitySignalSource,
+        appCategory: TelemetryMeetingActivityAppCategory
+    )
+    case meetingActivityDetectionDeclined(
+        signalSource: TelemetryMeetingActivitySignalSource,
+        appCategory: TelemetryMeetingActivityAppCategory
+    )
     case micStallDetected(signature: TelemetryMicStallSignature, elapsedMs: Int)
     /// Launch-time VAD model prep outcome (Phase 4.5). Only `.prepared` /
     /// `.failed` are ever sent — see `TelemetryVADModelPrepOutcome`.
@@ -977,6 +1009,9 @@ extension TelemetryEventSpec {
         case .meetingAutoStopProposed: return .meetingAutoStopProposed
         case .meetingAutoStopConfirmed: return .meetingAutoStopConfirmed
         case .meetingAutoStopVetoed: return .meetingAutoStopVetoed
+        case .meetingActivityDetectionShown: return .meetingActivityDetectionShown
+        case .meetingActivityDetectionAccepted: return .meetingActivityDetectionAccepted
+        case .meetingActivityDetectionDeclined: return .meetingActivityDetectionDeclined
         case .micStallDetected: return .micStallDetected
         case .vadModelPrep: return .vadModelPrep
         case .calendarReminderShown: return .calendarReminderShown
@@ -1552,6 +1587,13 @@ extension TelemetryEventSpec {
              .meetingAutoStopConfirmed(let reason),
              .meetingAutoStopVetoed(let reason):
             return ["reason": reason.rawValue]
+        case .meetingActivityDetectionShown(let signalSource, let appCategory),
+             .meetingActivityDetectionAccepted(let signalSource, let appCategory),
+             .meetingActivityDetectionDeclined(let signalSource, let appCategory):
+            return [
+                "signal_source": signalSource.rawValue,
+                "app_category": appCategory.rawValue,
+            ]
         case .micStallDetected(let signature, let elapsedMs):
             return [
                 "signature": signature.rawValue,
@@ -1800,6 +1842,9 @@ public enum TelemetryImplementedContract {
         .meetingAutoStopProposed: ["reason"],
         .meetingAutoStopConfirmed: ["reason"],
         .meetingAutoStopVetoed: ["reason"],
+        .meetingActivityDetectionShown: ["signal_source", "app_category"],
+        .meetingActivityDetectionAccepted: ["signal_source", "app_category"],
+        .meetingActivityDetectionDeclined: ["signal_source", "app_category"],
         .micStallDetected: ["signature", "elapsed_ms"],
         .vadModelPrep: ["outcome"],
         .calendarReminderShown: ["mode", "lead_minutes", "has_meet_url"],

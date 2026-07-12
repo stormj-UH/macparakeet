@@ -171,11 +171,13 @@ final class SettingsSearchIndexTests: XCTestCase {
         let meetingGatedIds: Set<String> = [
             "meeting",
             "meeting.autoStop",
+            "meeting.activityDetection",
             "meeting.calendar",
             "system.permissions.screen"
         ]
         let calendarGatedIds: Set<String> = ["meeting.calendar"]
         let autoStopGatedIds: Set<String> = ["meeting.autoStop"]
+        let activityDetectionGatedIds: Set<String> = ["meeting.activityDetection"]
         let presentIds = Set(SettingsSearchIndex.entries.map(\.id))
         let intersection = presentIds.intersection(meetingGatedIds)
 
@@ -188,9 +190,12 @@ final class SettingsSearchIndexTests: XCTestCase {
             let expectedWithAutoStop = AppFeatures.meetingAutoStopEnabled
                 ? expected
                 : expected.subtracting(autoStopGatedIds)
+            let expectedWithActivityDetection = AppFeatures.meetingActivityDetectionEnabled
+                ? expectedWithAutoStop
+                : expectedWithAutoStop.subtracting(activityDetectionGatedIds)
             XCTAssertEqual(
                 intersection,
-                expectedWithAutoStop,
+                expectedWithActivityDetection,
                 "Meeting-gated entries should match the active flag combination"
             )
         } else {
@@ -209,6 +214,24 @@ final class SettingsSearchIndexTests: XCTestCase {
                 XCTAssertTrue(ids.contains("meeting.autoStop"), "Query \(query) should find meeting auto-stop")
             } else {
                 XCTAssertFalse(ids.contains("meeting.autoStop"), "Query \(query) should not reveal hidden auto-stop")
+            }
+        }
+    }
+
+    func testMeetingActivityDetectionQueriesHonorFeatureFlag() {
+        for query in ["activity detection", "meeting detection", "ad-hoc calls", "record this meeting"] {
+            let ids = Set(SettingsSearchIndex.matches(query).map(\.id))
+
+            if AppFeatures.meetingActivityDetectionEnabled {
+                XCTAssertTrue(
+                    ids.contains("meeting.activityDetection"),
+                    "Query \(query) should find meeting activity detection"
+                )
+            } else {
+                XCTAssertFalse(
+                    ids.contains("meeting.activityDetection"),
+                    "Query \(query) should not reveal hidden meeting activity detection"
+                )
             }
         }
     }
