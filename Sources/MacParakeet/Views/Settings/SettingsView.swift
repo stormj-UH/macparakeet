@@ -314,9 +314,7 @@ struct SettingsView: View {
         if entry.tab == .capture, let section = captureSection(for: entry.cardAnchor) {
             rootViewModel.activeCaptureWorkflow = section
         }
-        if entry.id == "engine.transcriptionSelector" {
-            advancedTranscriptionExpanded = true
-        }
+        expandAdvancedTranscriptionIfNeeded(anchor: entry.cardAnchor)
         pendingScrollTarget = normalizedScrollAnchor(for: entry.cardAnchor, tab: entry.tab)
         rootViewModel.activeTab = entry.tab
         rootViewModel.clearSearch()
@@ -327,9 +325,7 @@ struct SettingsView: View {
         if destinationTab == .capture, let anchor, let section = captureSection(for: anchor) {
             rootViewModel.activeCaptureWorkflow = section
         }
-        if anchor == "engine.transcriptionSelector" {
-            advancedTranscriptionExpanded = true
-        }
+        expandAdvancedTranscriptionIfNeeded(anchor: anchor)
         if let anchor {
             pendingScrollTarget = normalizedScrollAnchor(for: anchor, tab: destinationTab)
         }
@@ -347,6 +343,12 @@ struct SettingsView: View {
             return "transcription"
         case .meetings:
             return "meeting"
+        }
+    }
+
+    private func expandAdvancedTranscriptionIfNeeded(anchor: String?) {
+        if anchor == SettingsSearchIndex.advancedTranscriptionAnchor {
+            advancedTranscriptionExpanded = true
         }
     }
 
@@ -2127,7 +2129,7 @@ struct SettingsView: View {
                 Divider()
 
                 advancedTranscriptionDisclosure
-                    .id("engine.transcriptionSelector")
+                    .id(SettingsSearchIndex.advancedTranscriptionAnchor)
             }
         }
     }
@@ -2233,71 +2235,74 @@ struct SettingsView: View {
     }
 
     private var advancedTranscriptionDisclosure: some View {
-        DisclosureGroup(isExpanded: $advancedTranscriptionExpanded) {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-                Text(
-                    "MacParakeet uses your selected speech engine for everything by default. "
-                        + "You can choose another engine for completed meeting recordings, files, media, and URLs—for example, for higher accuracy or broader language support when a longer wait is okay."
-                )
-                .font(DesignSystem.Typography.caption)
-                .foregroundStyle(DesignSystem.Colors.textSecondary)
-                .frame(maxWidth: 900, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-                HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
-                    Text("Recordings & files")
-                        .font(DesignSystem.Typography.body.weight(.medium))
-                        .foregroundStyle(DesignSystem.Colors.textPrimary)
-
-                    Spacer(minLength: DesignSystem.Spacing.md)
-
-                    Picker(
-                        "Recordings & files engine",
-                        selection: Binding(
-                            get: { viewModel.engine.recordingsSpeechEngineSelection },
-                            set: { viewModel.engine.recordingsSpeechEngineSelection = $0 }
-                        )
-                    ) {
-                        Text("Same as \(viewModel.engine.speechEnginePreference.displayName)")
-                            .tag(SpeechEnginePreference?.none)
-                        ForEach(transcriptionEngineOptions, id: \.self) { engine in
-                            Text(engine.displayName).tag(Optional(engine))
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .tint(DesignSystem.Colors.accent)
-                    .frame(minWidth: 190, idealWidth: 210, maxWidth: 240)
-                    .disabled(viewModel.engine.speechEngineSwitching)
-                    .accessibilityLabel("Engine for recordings and files")
-                    .accessibilityHint(
-                        "Use the selected speech engine or choose a separate engine for completed meeting recordings, files, media, and URLs."
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+            DisclosureGroup(isExpanded: $advancedTranscriptionExpanded) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                    Text(
+                        "MacParakeet uses your selected speech engine for everything by default. "
+                            + "You can choose another engine for completed meeting recordings, files, media, and URLs—for example, for higher accuracy or broader language support when a longer wait is okay."
                     )
-                }
-
-                Text(recordingsEngineHint)
                     .font(DesignSystem.Typography.caption)
                     .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    .frame(maxWidth: 900, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if let error = viewModel.engine.transcriptionSpeechEngineError {
-                    Text(error)
+                    HStack(alignment: .center, spacing: DesignSystem.Spacing.md) {
+                        Text("Recordings & files")
+                            .font(DesignSystem.Typography.body.weight(.medium))
+                            .foregroundStyle(DesignSystem.Colors.textPrimary)
+
+                        Spacer(minLength: DesignSystem.Spacing.md)
+
+                        Picker(
+                            "Recordings & files engine",
+                            selection: Binding(
+                                get: { viewModel.engine.recordingsSpeechEngineSelection },
+                                set: { viewModel.engine.recordingsSpeechEngineSelection = $0 }
+                            )
+                        ) {
+                            Text("Same as \(viewModel.engine.speechEnginePreference.displayName)")
+                                .tag(SpeechEnginePreference?.none)
+                            ForEach(transcriptionEngineOptions, id: \.self) { engine in
+                                Text(engine.displayName).tag(Optional(engine))
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .tint(DesignSystem.Colors.accent)
+                        .frame(minWidth: 190, idealWidth: 210, maxWidth: 240)
+                        .disabled(viewModel.engine.speechEngineSwitching)
+                        .accessibilityLabel("Engine for recordings and files")
+                        .accessibilityHint(
+                            "Use the selected speech engine or choose a separate engine for completed meeting recordings, files, media, and URLs."
+                        )
+                    }
+
+                    Text(recordingsEngineHint)
                         .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(DesignSystem.Colors.errorRed)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, DesignSystem.Spacing.sm)
+            } label: {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                    Text("Advanced transcription")
+                        .font(DesignSystem.Typography.body.weight(.medium))
+                        .foregroundStyle(DesignSystem.Colors.textPrimary)
+                    Text(advancedTranscriptionSummary)
+                        .font(DesignSystem.Typography.caption)
+                        .foregroundStyle(DesignSystem.Colors.textSecondary)
                 }
             }
-            .padding(.top, DesignSystem.Spacing.sm)
-        } label: {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                Text("Advanced transcription")
-                    .font(DesignSystem.Typography.body.weight(.medium))
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Text(advancedTranscriptionSummary)
+            .tint(DesignSystem.Colors.accent)
+
+            if let error = viewModel.engine.transcriptionSpeechEngineError {
+                Text(error)
                     .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
+                    .foregroundStyle(DesignSystem.Colors.errorRed)
             }
         }
-        .tint(DesignSystem.Colors.accent)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var advancedTranscriptionSummary: String {

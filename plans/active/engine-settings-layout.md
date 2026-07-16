@@ -2,8 +2,8 @@
 
 Status: active (2026-07-16)
 Owner: Daniel (design), Codex (implementation)
-Scope: Settings → Engine tab UI/copy only. No behavior, persistence, or
-routing changes.
+Scope: Settings → Engine tab UI/copy plus navigation that expands and scrolls
+to the advanced control. No persistence, routing, or engine-lifecycle changes.
 
 ## Problem
 
