@@ -708,7 +708,7 @@ protocol TranscriptionRepositoryProtocol: Sendable {
 
 ### 3. Local STT Engines
 
-Speech recognition runs in the app process. Parakeet via FluidAudio CoreML on the Neural Engine is the default engine family: v3 is the multilingual default, v2 is an English-only TDT opt-in, and Unified is an English-only opt-in with punctuation/capitalization. Three optional local engines extend coverage: Nemotron 3.5 (Beta), a fast FluidAudio CoreML streaming engine with a multilingual default build and an English-only build; Cohere Transcribe, a batch-only FluidAudio CoreML accuracy engine; and WhisperKit for broader language coverage.
+Speech recognition runs in the app process. Parakeet via FluidAudio CoreML on the Neural Engine is the standard-path engine family: v3 is its multilingual default, v2 is an English-only TDT opt-in, and Unified is an English-only opt-in with punctuation/capitalization. Locale-aware onboarding initially selects WhisperKit when the Mac has no preferred English language and prefers Korean, Japanese, Chinese, or Cantonese. Nemotron 3.5 (Beta), Cohere Transcribe, and WhisperKit remain selectable local engines for different coverage and runtime needs.
 
 **Responsibility:** Speech-to-text transcription using the user's selected local engine.
 

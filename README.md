@@ -55,7 +55,7 @@
 
 ---
 
-MacParakeet combines system-wide dictation, file/media transcription, and meeting recording in one local-first app, with optional selected-text Transforms and agent automation through `macparakeet-cli`. Parakeet v3 is the default local speech engine; Parakeet v2/Unified, Nemotron Beta, Cohere Transcribe, and WhisperKit are optional local choices for different language, latency, timestamp, and accuracy needs. Version 0.7.3 adds System Default microphone-routing repair, separate live/final speech-engine routes, bounded meeting-capture lifecycle handling, meeting auto-save feedback, and bundled CLI 3.0. All speech recognition happens on your Mac; networked AI features are separate and opt-in.
+MacParakeet combines system-wide dictation, file/media transcription, and meeting recording in one local-first app, with optional selected-text Transforms and agent automation through `macparakeet-cli`. Parakeet v3 is the standard-path local speech engine; locale-aware first-run setup selects WhisperKit instead when the Mac has no preferred English language and prefers Korean, Japanese, Chinese, or Cantonese. Parakeet v2/Unified, Nemotron Beta, Cohere Transcribe, and WhisperKit remain selectable local choices for different language, latency, timestamp, and accuracy needs. Version 0.7.3 adds System Default microphone-routing repair, separate live/final speech-engine routes, bounded meeting-capture lifecycle handling, meeting auto-save feedback, and bundled CLI 3.0. All speech recognition happens on your Mac; networked AI features are separate and opt-in.
 
 ## Release status
 
@@ -130,7 +130,7 @@ Cohere is the most accurate on-device engine in this benchmark, but its statisti
 
 **Download:** Grab the [notarized DMG](https://downloads.macparakeet.com/MacParakeet.dmg) or visit [macparakeet.com](https://macparakeet.com). Drag to Applications, done.
 
-First launch downloads the default Parakeet CoreML build (~465 MB) plus speaker-detection assets (~130 MB) as needed. Parakeet v2 and v3 cache independently if you install both. Core dictation, local-file transcription, and meeting recording can work offline after required models are installed; media imports, updates, telemetry, and cloud/remote AI providers still require a network.
+On the standard path, first launch downloads the default Parakeet CoreML build (~465 MB) plus speaker-detection assets (~130 MB) as needed. Locale-aware Korean/Japanese/Chinese/Cantonese setup downloads WhisperKit instead when no preferred English language is present. Parakeet v2 and v3 cache independently if you install both. Core dictation, local-file transcription, and meeting recording can work offline after required models are installed; media imports, updates, telemetry, and cloud/remote AI providers still require a network.
 
 The DMG is the stable release.
 
@@ -219,7 +219,7 @@ Use `--format transcript` for transcript-only stdout in shell pipelines. Add `--
 
 | Layer | Choice |
 |-------|--------|
-| STT | Parakeet via [FluidAudio](https://github.com/FluidInference/FluidAudio) CoreML (`v3` multilingual default, `v2` English-only opt-in, `unified` English-only punctuated opt-in) + optional local Nemotron Beta, Cohere Transcribe, and WhisperKit engines |
+| STT | Parakeet via [FluidAudio](https://github.com/FluidInference/FluidAudio) CoreML (`v3` standard-path default, `v2` English-only opt-in, `unified` English-only punctuated opt-in) + local Nemotron Beta, Cohere Transcribe, and WhisperKit engines; locale-aware CJK/Korean onboarding can select WhisperKit initially |
 | STT orchestration | Shared runtime + explicit scheduler with a reserved dictation slot and a shared meeting/file slot; speech-engine routing and meeting-session pinning |
 | Language | Swift 6 language mode (package tools-version 5.9) + SwiftUI |
 | Database | SQLite via GRDB |

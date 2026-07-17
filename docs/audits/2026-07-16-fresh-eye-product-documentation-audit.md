@@ -74,7 +74,7 @@ The Markdown inventory was evaluated in three classes:
 | Product | Fast, private, local-first voice app for Apple Silicon Macs. |
 | Platform | macOS 14.2+, Apple Silicon only. |
 | Primary modes | System-wide dictation, file/media transcription, and meeting recording. |
-| Default speech engine | Parakeet v3 through FluidAudio CoreML/ANE. |
+| Default speech engine | Parakeet v3 through FluidAudio CoreML/ANE on the standard path; locale-aware onboarding selects WhisperKit when preferred languages contain no English and include Korean, Japanese, Chinese, or Cantonese. |
 | Optional local engines | Parakeet v2/Unified, Nemotron Beta, Cohere Transcribe, and WhisperKit, with different language/live/timestamp/resource capabilities. |
 | Speech privacy | Core speech recognition is on-device after required models are installed. |
 | Network boundaries | Media imports, model/update flows, telemetry, and cloud/remote AI providers may use the network. AI features are separate and opt-in; telemetry is opt-out. |
@@ -281,7 +281,7 @@ The final change was checked with:
 | Stale current-claim scans | No unqualified current `155x`/`~66 MB`, old About copy, unsupported brand superlative, or pre-v0.7 stable-release claim in authoritative surfaces |
 | Brand export regeneration | 21 exports rendered; three changed tagline images visually inspected |
 | `git diff --check` | Pass |
-| Focused Swift Settings test | `SettingsSearchIndexTests` pass |
+| Focused Swift tests | 30 `SettingsSearchIndexTests` pass; locale-aware CJK/Korean onboarding recommendation test passes |
 | Marketing video TypeScript | Not run: `marketing/video/node_modules` is not installed in the clean worktree; the change is string-only |
 
 The full Swift suite was intentionally not run for this copy/documentation

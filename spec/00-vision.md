@@ -79,7 +79,7 @@ hand it safely to you and your agents — otherwise it does not ship.
 
 MacParakeet is deliberately optimized for **speed + privacy + simplicity + user ownership**. Competitor capabilities and prices change; this spec defines MacParakeet's product commitments rather than serving as a live market-comparison table.
 
-**MacParakeet's answer:** Built from the ground up around Parakeet TDT for speed, with multilingual v3 as the default, English-only v2 as an opt-in TDT build, and Parakeet Unified as an opt-in English build with punctuation, capitalization, live preview, and word-timestamped output, plus optional local Nemotron Beta, Cohere Transcribe, and WhisperKit engines for broader language coverage and accuracy-focused batch work. Fully local speech by default, with optional networked features. Three capture modes, plus Transforms for selected text. Simple and GPL open-source. Done.
+**MacParakeet's answer:** Built from the ground up around Parakeet TDT for speed, with multilingual v3 as the standard-path default, English-only v2 as an opt-in TDT build, and Parakeet Unified as an opt-in English build with punctuation, capitalization, live preview, and word-timestamped output, plus local Nemotron Beta, Cohere Transcribe, and WhisperKit engines for broader language coverage and accuracy-focused batch work. Locale-aware first-run setup selects WhisperKit for Korean/Japanese/Chinese/Cantonese when no preferred English language is present. Fully local speech by default, with optional networked features. Three capture modes, plus Transforms for selected text. Simple and GPL open-source. Done.
 
 ---
 
@@ -498,7 +498,7 @@ Ship-quality polish. Direct distribution via notarized DMG.
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | **Platform** | macOS 14.2+, Apple Silicon only | FluidAudio CoreML requires Apple Silicon. |
-| **STT engine** | Parakeet TDT 0.6B-v3 by default; Parakeet v2 and Unified English opt-ins; optional Nemotron Beta, WhisperKit, and Cohere Transcribe | Parakeet gives the latency target for supported languages; v2 avoids language auto-detect for English-only users; Unified offers a newer English punctuation/capitalization path with live preview and word timestamps; Nemotron is a fast local Beta path; WhisperKit keeps mature broader multilingual speech local; Cohere is a larger batch-only accuracy path. |
+| **STT engine** | Parakeet TDT 0.6B-v3 on the standard path; locale-aware CJK/Korean onboarding can select WhisperKit; Parakeet v2 and Unified English opt-ins; selectable Nemotron Beta, WhisperKit, and Cohere Transcribe | Parakeet gives the latency target for supported languages; v2 avoids language auto-detect for English-only users; Unified offers a newer English punctuation/capitalization path with live preview and word timestamps; Nemotron is a fast local Beta path; WhisperKit keeps mature broader multilingual speech local; Cohere is a larger batch-only accuracy path. |
 | **YouTube downloads** | Standalone yt-dlp | macOS binary, auto-updates via `--update`. No Python needed. |
 | **UI framework** | SwiftUI | Native Mac experience. Menu bar + window. |
 | **Database** | SQLite (GRDB) | Single file. No server. Dictation history, custom words, settings. |
