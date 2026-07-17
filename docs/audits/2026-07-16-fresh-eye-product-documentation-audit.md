@@ -282,11 +282,15 @@ The final change was checked with:
 | Brand export regeneration | 21 exports rendered; three changed tagline images visually inspected |
 | `git diff --check` | Pass |
 | Focused Swift tests | 30 `SettingsSearchIndexTests` pass; locale-aware CJK/Korean onboarding recommendation test passes |
+| Hosted full Swift suite | One exact-head run passed all 4,903 tests; its duplicate exposed a scheduler-dependent 40 ms fixed-sleep test, which was replaced with condition-based waiting and passed 21 consecutive focused local runs |
 | Marketing video TypeScript | Not run: `marketing/video/node_modules` is not installed in the clean worktree; the change is string-only |
 
-The full Swift suite was intentionally not run for this copy/documentation
-change. The focused test compiles the touched Swift surface, and the repository
-instructions reserve the 4,300+ test suite for a proportional final code gate.
+The hosted final gate ran the full suite. The product behavior was green; the
+duplicate run uncovered a brittle timing assumption in
+`MeetingRecordingTileTests.testAudioSavedConfirmationAutoClears`. The test now
+waits for the observable condition with a bounded deadline instead of assuming
+that a main-actor child task will always run within 40 milliseconds under
+parallel CI load. No shipping behavior changed.
 
 ## 7. What was intentionally not changed
 
