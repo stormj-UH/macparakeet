@@ -113,12 +113,19 @@ MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$MACOS_DIR"
 cp -f "$APP_BIN" "$APP_MACOS_BIN"
 
-# Copy resource bundle (contains discover-fallback.json etc.)
+# Copy resource bundle (contains bundled JSON resources etc.)
 RESOURCE_BUNDLE="$PRODUCT_DIR/MacParakeet_MacParakeet.bundle"
 if [[ -d "$RESOURCE_BUNDLE" ]]; then
   RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
   mkdir -p "$RESOURCES_DIR"
   rsync -a --delete "$RESOURCE_BUNDLE" "$RESOURCES_DIR/"
+fi
+
+# Bundle the production app icon (same source as scripts/dist/build_app_bundle.sh)
+ICON_SRC="$ROOT_DIR/Assets/AppIcon.icns"
+if [[ -f "$ICON_SRC" ]]; then
+  mkdir -p "$APP_BUNDLE/Contents/Resources"
+  cp -f "$ICON_SRC" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 fi
 
 # Copy frameworks into the bundle so dyld loads only bundle-local paths.
@@ -155,6 +162,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
     <string>1</string>
     <key>CFBundleShortVersionString</key>
     <string>0.0.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>MacParakeet needs microphone access for voice dictation.</string>
     <key>NSAudioCaptureUsageDescription</key>
